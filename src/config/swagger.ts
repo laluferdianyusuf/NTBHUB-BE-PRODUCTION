@@ -3,8 +3,7 @@ import { fileURLToPath } from "url";
 import swaggerJsdoc from "swagger-jsdoc";
 import swaggerUi from "swagger-ui-express";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const docsGlob = path.join(__dirname, "../docs/**/*.{ts,js}");
+const docsGlob = path.resolve(process.cwd(), "src/docs/**/*.{ts,js}");
 
 const options: swaggerJsdoc.Options = {
   definition: {
@@ -43,14 +42,20 @@ Semua path di bawah prefix \`/api/v1\`.
       { url: "https://api.ntbhub.com/api/v1", description: "Production" },
     ],
     tags: [
-      { name: "Auth", description: "Registrasi, login, refresh token, PIN transaksi" },
+      {
+        name: "Auth",
+        description: "Registrasi, login, refresh token, PIN transaksi",
+      },
       { name: "Users", description: "Profil, password, manajemen user" },
       { name: "Booking", description: "Booking venue, order, invoice" },
       { name: "Venue", description: "Venue, layanan, menu, review, promosi" },
       { name: "Event", description: "Event, tiket, check-in QR" },
       { name: "Community", description: "Komunitas, post, member, komentar" },
       { name: "Finance", description: "Payment, ledger, withdraw, saldo" },
-      { name: "Platform", description: "Notifikasi, maps, search, device, courier" },
+      {
+        name: "Platform",
+        description: "Notifikasi, maps, search, device, courier",
+      },
     ],
     components: {
       securitySchemes: {
