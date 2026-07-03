@@ -1,0 +1,65 @@
+import { Prisma } from "@prisma/client";
+import { prisma } from "config/prisma";
+export class VenueBalanceRepository {
+  private transaction(tx?: Prisma.TransactionClient) {
+    return tx ?? prisma;
+  }
+
+  async getBalanceByUserId(
+    venueId: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<number | null> {
+    const client = this.transaction(tx);
+    const venueBalance = await client.venueBalance.findUnique({
+      where: { venueId },
+    });
+    return venueBalance ? Number(venueBalance.balance) : null;
+  }
+
+  async getVenueBalance(venueId: string) {
+    return prisma.venueBalance.findUnique({
+      where: { venueId },
+    });
+  }
+
+  async incrementVenueBalance(
+    venueId: string,
+    amount: number,
+    tx?: Prisma.TransactionClient,
+  ): Promise<void> {
+    const client = this.transaction(tx);
+    await client.venueBalance.upsert({
+      where: { venueId },
+      update: { balance: { increment: amount } },
+      create: { venueId, balance: amount },
+    });
+  }
+
+  async decrementVenueBalance(
+    venueId: string,
+    amount: number,
+    tx?: Prisma.TransactionClient,
+  ): Promise<void> {
+    const client = this.transaction(tx);
+    await client.venueBalance.upsert({
+      where: { venueId },
+      update: { balance: { decrement: amount } },
+      create: { venueId, balance: 0 },
+    });
+  }
+
+  async ensureInitialBalance(
+    venueId: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<void> {
+    const client = this.transaction(tx);
+    await client.venueBalance.upsert({
+      where: { venueId },
+      update: {},
+      create: {
+        venueId,
+        balance: 0,
+      },
+    });
+  }
+}

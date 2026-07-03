@@ -1,0 +1,605 @@
+import {
+  AccountType,
+  LedgerDirection,
+  LedgerReferenceType,
+  Prisma,
+} from "@prisma/client";
+import { prisma } from "config/prisma";
+
+export class LedgerRepository {
+  private getClient(tx?: Prisma.TransactionClient) {
+    return tx ?? prisma;
+  }
+
+  private async enrichLedgerEntries<
+    T extends {
+      referenceType: LedgerReferenceType | null;
+      referenceId: string | null;
+    },
+  >(transactions: T[]) {
+    const referenceIds = [
+      ...new Set(
+        transactions
+          .map((item) => item.referenceId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+
+    if (!referenceIds.length) {
+      return transactions.map((item) => ({
+        ...item,
+        transactionSource: "Unknown Transaction",
+        transactionSourceType: null,
+      }));
+    }
+
+    const [bookings, eventOrders, communityEventOrders, orders] =
+      await Promise.all([
+        prisma.booking.findMany({
+          where: { id: { in: referenceIds } },
+          select: {
+            id: true,
+            venue: { select: { name: true } },
+          },
+        }),
+        prisma.eventOrder.findMany({
+          where: { id: { in: referenceIds } },
+          select: {
+            id: true,
+            event: { select: { name: true } },
+          },
+        }),
+        prisma.communityEventOrder.findMany({
+          where: { id: { in: referenceIds } },
+          select: {
+            id: true,
+            communityEvent: { select: { title: true } },
+          },
+        }),
+        prisma.order.findMany({
+          where: { id: { in: referenceIds } },
+          select: {
+            id: true,
+            venue: { select: { name: true } },
+          },
+        }),
+      ]);
+
+    const bookingMap = new Map(bookings.map((booking) => [booking.id, booking]));
+    const eventOrderMap = new Map(
+      eventOrders.map((order) => [order.id, order]),
+    );
+    const communityEventOrderMap = new Map(
+      communityEventOrders.map((order) => [order.id, order]),
+    );
+    const orderMap = new Map(orders.map((order) => [order.id, order]));
+
+    return transactions.map((item) => {
+      let sourceType: string | null = null;
+      let sourceName: string | null = null;
+
+      if (item.referenceType === "FEE" && item.referenceId) {
+        const booking = bookingMap.get(item.referenceId);
+        if (booking?.venue) {
+          sourceType = "VENUE";
+          sourceName = booking.venue.name;
+        }
+      }
+
+      if (!sourceType && item.referenceId) {
+        const eventOrder = eventOrderMap.get(item.referenceId);
+        if (eventOrder?.event) {
+          sourceType = "EVENT";
+          sourceName = eventOrder.event.name;
+        }
+      }
+
+      if (!sourceType && item.referenceId) {
+        const communityEventOrder = communityEventOrderMap.get(item.referenceId);
+        if (communityEventOrder?.communityEvent) {
+          sourceType = "COMMUNITY_EVENT";
+          sourceName = communityEventOrder.communityEvent.title;
+        }
+      }
+
+      if (item.referenceType === "ORDER" && item.referenceId) {
+        const order = orderMap.get(item.referenceId);
+        if (order?.venue) {
+          sourceType = "ORDER";
+          sourceName = order.venue.name;
+        }
+      }
+
+      if (item.referenceType === "TOPUP") {
+        sourceType = "TOPUP";
+        sourceName = "Top Up Balance";
+      }
+
+      return {
+        ...item,
+        transactionSource: sourceName ?? "Unknown Transaction",
+        transactionSourceType: sourceType,
+      };
+    });
+  }
+
+  async createEntry(
+    data: {
+      accountId: string;
+      type: LedgerDirection;
+      amount: number;
+      referenceType?: LedgerReferenceType;
+      referenceId?: string;
+    },
+    tx?: Prisma.TransactionClient,
+  ) {
+    const client = this.getClient(tx);
+    return client.ledgerEntry.create({ data });
+  }
+
+  async createMany(
+    entries: {
+      accountId: string;
+      type: LedgerDirection;
+      amount: number;
+      referenceType?: LedgerReferenceType;
+      referenceId?: string;
+    }[],
+    tx?: Prisma.TransactionClient,
+  ) {
+    const client = this.getClient(tx);
+    return client.ledgerEntry.createMany({
+      data: entries,
+    });
+  }
+
+  async getAccountHistory(
+    accountId: string,
+    cursor?: string,
+    limit = 20,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const client = this.getClient(tx);
+
+    return client.ledgerEntry.findMany({
+      where: { accountId },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      ...(cursor && {
+        skip: 1,
+        cursor: { id: cursor },
+      }),
+    });
+  }
+
+  async findLedgerByAccount(
+    accountId: string,
+    cursor?: string,
+    limit = 20,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const client = this.getClient(tx);
+
+    return client.ledgerEntry.findMany({
+      where: {
+        accountId: accountId,
+      },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      ...(cursor && {
+        skip: 1,
+        cursor: { id: cursor },
+      }),
+    });
+  }
+
+  async getAllTransactions(
+    skip = 0,
+    take = 20,
+    type?: string,
+    mode?: "USER_TRANSACTION" | "APP_REVENUE",
+  ) {
+    const where: Prisma.LedgerEntryWhereInput = {};
+
+    if (mode === "APP_REVENUE") {
+      where.account = {
+        isPlatform: true,
+      };
+
+      where.referenceType = "FEE";
+      where.type = "CREDIT";
+    }
+
+    if (mode === "USER_TRANSACTION") {
+      where.account = {
+        type: "USER",
+      };
+
+      where.referenceType = {
+        in: [
+          "ORDER",
+          "BOOKING_PAYMENT",
+          "EVENT_PAYMENT",
+          "TOPUP",
+          "COMMUNITY_EVENT_PAYMENT",
+        ],
+      };
+    }
+
+    if (type) {
+      where.referenceType = type as any;
+    }
+
+    const [transactions, total] = await prisma.$transaction([
+      prisma.ledgerEntry.findMany({
+        where,
+        skip,
+        take,
+        include: {
+          account: {
+            include: {
+              user: true,
+              venue: {
+                select: {
+                  name: true,
+                },
+              },
+              event: {
+                select: {
+                  name: true,
+                },
+              },
+              community: {
+                select: {
+                  name: true,
+                },
+              },
+              courier: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      }),
+
+      prisma.ledgerEntry.count({
+        where,
+      }),
+    ]);
+
+    const data = await this.enrichLedgerEntries(transactions);
+
+    return {
+      data,
+      total,
+      totalPages: Math.ceil(total / take),
+    };
+  }
+
+  async getTransactions(venueId: string, skip = 0, take = 20, type?: string) {
+    const where: Prisma.LedgerEntryWhereInput = {
+      account: {
+        venueId,
+      },
+    };
+
+    if (type) {
+      where.type = type as any;
+    }
+
+    const [data, total] = await prisma.$transaction([
+      prisma.ledgerEntry.findMany({
+        where,
+        skip,
+        take,
+        include: {
+          account: true,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      }),
+
+      prisma.ledgerEntry.count({ where }),
+    ]);
+
+    return {
+      data,
+      total,
+      totalPages: Math.ceil(total / take),
+    };
+  }
+
+  async getTransactionsByDate(venueId: string, fromDate: Date) {
+    return prisma.ledgerEntry.findMany({
+      where: {
+        account: {
+          venueId,
+        },
+        createdAt: {
+          gte: fromDate,
+        },
+      },
+      include: {
+        account: true,
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+    });
+  }
+
+  async findUserTransactions(
+    userId: string,
+    params?: {
+      page?: number;
+      limit?: number;
+      referenceType?: Prisma.LedgerEntryWhereInput["referenceType"];
+    },
+  ) {
+    const page = params?.page || 1;
+    const limit = params?.limit || 10;
+
+    const where: Prisma.LedgerEntryWhereInput = {
+      account: {
+        userId,
+      },
+    };
+
+    if (params?.referenceType) {
+      where.referenceType = params.referenceType;
+    }
+
+    const [transactions, total] = await Promise.all([
+      prisma.ledgerEntry.findMany({
+        where,
+        select: {
+          id: true,
+          type: true,
+          amount: true,
+          referenceType: true,
+          referenceId: true,
+          createdAt: true,
+
+          account: {
+            select: {
+              id: true,
+              type: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+
+      prisma.ledgerEntry.count({
+        where,
+      }),
+    ]);
+
+    return {
+      data: transactions,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async getBalance(accountId: string, tx?: Prisma.TransactionClient) {
+    const client = this.getClient(tx);
+
+    const credit = await client.ledgerEntry.aggregate({
+      where: {
+        accountId,
+        type: "CREDIT",
+      },
+      _sum: { amount: true },
+    });
+
+    const debit = await client.ledgerEntry.aggregate({
+      where: {
+        accountId,
+        type: "DEBIT",
+      },
+      _sum: { amount: true },
+    });
+
+    const totalBalance = Number(credit._sum.amount || 0);
+    const totalExpenses = Number(debit._sum.amount || 0);
+    const balance = totalBalance - totalExpenses;
+
+    return {
+      balance,
+      totalBalance,
+      totalExpenses,
+    };
+  }
+
+  async getBalanceByOwner(
+    params: {
+      userId?: string;
+      venueId?: string;
+      courierId?: string;
+      eventId?: string;
+      communityEventId?: string;
+    },
+    tx?: Prisma.TransactionClient,
+  ) {
+    const client = this.getClient(tx);
+
+    const account = await client.account.findFirst({
+      where: {
+        OR: [
+          { userId: params.userId },
+          { venueId: params.venueId },
+          { courierId: params.courierId },
+          { eventId: params.eventId },
+          { communityEventId: params.communityEventId },
+        ],
+      },
+    });
+
+    if (!account) {
+      throw new Error("Account not found");
+    }
+
+    return this.getBalance(account.id, tx);
+  }
+
+  async getTopSpenders(limit = 10) {
+    const result = await prisma.ledgerEntry.groupBy({
+      by: ["accountId"],
+      where: {
+        type: LedgerDirection.DEBIT,
+        account: {
+          type: AccountType.USER,
+        },
+      },
+      _sum: { amount: true },
+      _count: { id: true },
+      orderBy: {
+        _sum: { amount: "desc" },
+      },
+      take: limit,
+    });
+
+    const accounts = await prisma.account.findMany({
+      where: {
+        id: { in: result.map((g) => g.accountId) },
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            photo: true,
+          },
+        },
+        ledgerEntries: {
+          where: {
+            type: LedgerDirection.DEBIT,
+          },
+          select: {
+            referenceType: true,
+          },
+        },
+      },
+    });
+
+    return result.map((g) => {
+      const account = accounts.find((a) => a.id === g.accountId);
+      const entries = account?.ledgerEntries ?? [];
+
+      return {
+        userId: account?.user?.id,
+        name: account?.user?.name,
+        totalTransactions: g._count.id,
+        totalSpent: g._sum.amount ?? 0,
+        orderMenu: entries.filter(
+          (v) => v.referenceType === LedgerReferenceType.ORDER,
+        ).length,
+        bookingVenue: entries.filter(
+          (v) => v.referenceType === LedgerReferenceType.BOOKING_PAYMENT,
+        ).length,
+        eventTicket: entries.filter(
+          (v) => v.referenceType === LedgerReferenceType.EVENT_PAYMENT,
+        ).length,
+        communityEventTicket: entries.filter(
+          (v) =>
+            v.referenceType === LedgerReferenceType.COMMUNITY_EVENT_PAYMENT,
+        ).length,
+      };
+    });
+  }
+
+  async getGMV() {
+    const result = await prisma.ledgerEntry.aggregate({
+      where: {
+        type: LedgerDirection.DEBIT,
+        account: {
+          type: AccountType.USER,
+        },
+      },
+      _sum: {
+        amount: true,
+      },
+    });
+
+    return result._sum.amount ?? 0;
+  }
+
+  async getRevenueBreakdown() {
+    const result = await prisma.ledgerEntry.groupBy({
+      by: ["referenceType"],
+      where: {
+        type: LedgerDirection.CREDIT,
+        account: {
+          type: AccountType.USER,
+        },
+      },
+      _sum: {
+        amount: true,
+      },
+      _count: {
+        id: true,
+      },
+    });
+
+    return result;
+  }
+
+  async getDailyRevenue() {
+    const transactions = await prisma.ledgerEntry.findMany({
+      where: {
+        type: LedgerDirection.CREDIT,
+        account: {
+          type: AccountType.USER,
+        },
+      },
+      select: {
+        amount: true,
+        createdAt: true,
+      },
+    });
+
+    const daily: Record<string, number> = {};
+
+    transactions.forEach((t) => {
+      const date = t.createdAt.toISOString().split("T")[0];
+
+      if (!daily[date]) {
+        daily[date] = 0;
+      }
+
+      daily[date] += Number(t.amount);
+    });
+
+    return Object.entries(daily).map(([date, revenue]) => ({
+      date,
+      revenue,
+    }));
+  }
+
+  async getActiveUsers() {
+    const users = await prisma.ledgerEntry.groupBy({
+      by: ["accountId"],
+      where: {
+        type: LedgerDirection.DEBIT,
+        account: {
+          type: AccountType.USER,
+        },
+      },
+      _count: true,
+    });
+
+    return users.length;
+  }
+}

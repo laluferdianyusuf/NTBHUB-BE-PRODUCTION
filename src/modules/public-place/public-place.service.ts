@@ -1,0 +1,208 @@
+import { PublicPlace } from "@prisma/client";
+import { calcDistanceMeters, formatDistance } from "helpers/haversine";
+import { toNum } from "helpers/parser";
+import { uploadImage } from "utils/uploadS3";
+import { PublicPlaceImpressionRepository } from "modules/public-place/public-place-impression.repository";
+import { PublicPlaceLikeRepository } from "modules/public-place/public-place-like.repository";
+import { PublicPlaceRepository } from "modules/public-place/public-place.repository";
+
+export class PublicPlaceService {
+  private repo = new PublicPlaceRepository();
+  private likeRepo = new PublicPlaceLikeRepository();
+  private impressionRepo = new PublicPlaceImpressionRepository();
+
+  async getAll(params: {
+    latitude?: number;
+    longitude?: number;
+    type?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const {
+      latitude,
+      longitude,
+      type = "all",
+      search,
+      page = 1,
+      limit = 10,
+    } = params;
+
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await Promise.all([
+      this.repo.findAll({
+        type,
+        search,
+        skip,
+        take: limit,
+      }),
+      this.repo.countPublicPaces({ search, type }),
+    ]);
+
+    const shapedData = data.map((place) => {
+      let distance: number | null = null;
+
+      if (latitude && longitude && place.latitude && place.longitude) {
+        distance = calcDistanceMeters(
+          latitude,
+          longitude,
+          place.latitude,
+          place.longitude,
+        );
+      }
+
+      return {
+        id: place.id,
+        name: place.name,
+        type: place.type,
+        address: place.address,
+        description: place.description,
+        latitude: place.latitude,
+        longitude: place.longitude,
+        image: place.image,
+        gallery: place.gallery,
+        totalLikes: place.totalLikes,
+        totalReviews: place.totalReviews,
+        totalViews: place.totalViews,
+        updatedAll: place.updatedAt,
+        distance,
+        distanceLabel: formatDistance(distance),
+      };
+    });
+
+    return {
+      data: shapedData,
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  async getDetail(id: string, userId?: string) {
+    const place = await this.repo.findById(id);
+
+    if (!place || !place.isActive) {
+      throw new Error("Public place not found");
+    }
+
+    let isLiked = false;
+    if (userId) {
+      const liked = await this.likeRepo.isLikedByUser(id, userId);
+      isLiked = !!liked;
+    }
+
+    return { ...place, isLiked };
+  }
+
+  async create(
+    data: Omit<
+      PublicPlace,
+      "id" | "createdAt" | "updatedAt" | "gallery" | "image"
+    >,
+    files?: {
+      image?: Express.Multer.File[];
+      gallery?: Express.Multer.File[];
+    },
+  ): Promise<PublicPlace> {
+    let imageUrl: string | null = null;
+    let galleryUrls: string[] = [];
+
+    const imageFile = files?.image?.[0];
+
+    if (imageFile) {
+      const image = await uploadImage({
+        file: imageFile,
+        folder: "public_places",
+      });
+      imageUrl = image.url;
+    }
+
+    if (files?.gallery?.length) {
+      const gallery = await Promise.all(
+        files.gallery.map((file) =>
+          uploadImage({ file: file, folder: "public_places" }),
+        ),
+      );
+
+      galleryUrls = gallery.map((img) => img.url);
+    }
+
+    return this.repo.create({
+      ...data,
+      latitude: toNum(data.latitude),
+      longitude: toNum(data.longitude),
+      image: imageUrl,
+      gallery: galleryUrls,
+      isActive: true,
+    });
+  }
+
+  async update(id: string, data: PublicPlace): Promise<PublicPlace> {
+    return this.repo.update(id, data);
+  }
+
+  async deactivate(id: string): Promise<PublicPlace> {
+    return this.repo.deactivate(id);
+  }
+
+  async toggleLike(placeId: string, userId: string) {
+    const liked = await this.likeRepo.isLikedByUser(placeId, userId);
+
+    if (liked) {
+      await this.likeRepo.unlikePublicPlace(placeId, userId);
+      return { liked: false };
+    }
+
+    await this.likeRepo.likePublicPlace(placeId, userId);
+
+    return {
+      liked: true,
+    };
+  }
+
+  async getLikeCount(placeId: string, userId: string) {
+    try {
+      const [count, liked] = await Promise.all([
+        this.likeRepo.countLikesByPlaceId(placeId),
+        userId ? this.likeRepo.isLikedByUser(placeId, userId) : false,
+      ]);
+
+      return {
+        status: true,
+        status_code: 200,
+        message: "Like count retrieved",
+        data: { count, likedByMe: liked },
+      };
+    } catch (error) {
+      return {
+        status: false,
+        status_code: 500,
+        message: "Internal server error",
+        data: null,
+      };
+    }
+  }
+
+  async createImpression(data: { placeId: string; userId?: string }) {
+    await this.impressionRepo.createImpression(data);
+  }
+
+  async getImpressionCount(placeId: string) {
+    try {
+      const count = await this.impressionRepo.countImpressionByPlaceId(placeId);
+
+      return {
+        status: true,
+        status_code: 200,
+        message: "Impression count retrieved",
+        data: { count },
+      };
+    } catch (error) {
+      return {
+        status: false,
+        status_code: 500,
+        message: "Internal server error",
+        data: null,
+      };
+    }
+  }
+}

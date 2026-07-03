@@ -1,0 +1,47 @@
+import { subscriber } from "config/redis.config";
+import { Server } from "socket.io";
+
+export const setupRedisSubscriber = async (io: Server) => {
+  const channels = [
+    "booking-events",
+    "user-events",
+    "payment-events",
+    "transactions-events",
+    "order-events",
+    "menu-events",
+    "review-events",
+    "venue-events",
+    "points-events",
+    "notification-events",
+    "balance-events",
+    "invoice-events",
+    "community-events",
+    "comment-events",
+  ];
+
+  await subscriber.subscribe(...channels);
+
+  subscriber.on("message", (channel, message) => {
+    try {
+      const data = JSON.parse(message);
+
+      console.log(`[${channel}] -> ${data.event}`);
+
+      const payload = data.payload;
+
+      if (payload?.userId) {
+        io.to(`user:${payload.userId}`).emit(data.event, {
+          payload,
+        });
+      } else {
+        io.emit(data.event, { payload });
+      }
+    } catch (err) {
+      console.error("Subscriber error:", err);
+    }
+  });
+
+  subscriber.on("error", (err) => {
+    console.error("Redis subscriber error:", err);
+  });
+};

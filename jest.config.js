@@ -1,0 +1,36 @@
+export default {
+  preset: "ts-jest",
+  testEnvironment: "node",
+  testMatch: ["**/tests/**/*.test.ts"],
+  moduleFileExtensions: ["ts", "js", "json"],
+  roots: ["<rootDir>/src", "<rootDir>/tests"],
+  setupFiles: ["<rootDir>/tests/setup.ts"],
+  transform: {
+    "^.+\\.tsx?$": [
+      "ts-jest",
+      { tsconfig: "tsconfig.jest.json" },
+    ],
+  },
+  moduleNameMapper: {
+    "^shared/(.*)$": "<rootDir>/src/shared/$1",
+    "^modules$": "<rootDir>/src/modules/index.ts",
+    "^modules/(.*)$": "<rootDir>/src/modules/$1",
+    "^middlewares/(.*)$": "<rootDir>/src/middlewares/$1",
+    "^config/(.*)$": "<rootDir>/src/config/$1",
+    "^utils/(.*)$": "<rootDir>/src/utils/$1",
+    "^cron/(.*)$": "<rootDir>/src/cron/$1",
+    "^socket(.*)$": "<rootDir>/src/socket$1",
+    "^events/(.*)$": "<rootDir>/src/events/$1",
+    "^helpers/(.*)$": "<rootDir>/src/helpers/$1",
+  },
+  transformIgnorePatterns: ["/node_modules/(?!(uuid)/)"],
+  collectCoverage: true,
+  collectCoverageFrom: [
+    "src/shared/**/*.ts",
+    "src/middlewares/error.middleware.ts",
+    "!**/node_modules/**",
+  ],
+  coverageDirectory: "coverage",
+  coverageReporters: ["text", "html"],
+  testPathIgnorePatterns: ["/node_modules/", "/dist/", "/tests/e2e/"],
+};

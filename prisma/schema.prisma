@@ -1,0 +1,2138 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// #region ENUMS
+enum Role {
+  CUSTOMER
+  ADMIN
+  COURIER
+  VENUE_OWNER
+  VENUE_STAFF
+  EVENT_OWNER
+  COMMUNITY_OWNER
+}
+
+enum BookingStatus {
+  PENDING
+  PAID
+  ONGOING
+  CANCELLED
+  COMPLETED
+  EXPIRED
+}
+
+enum TransactionStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+  EXPIRED
+  CANCELLED
+}
+
+enum PointActivityType {
+  REGISTER
+  BOOKING
+  EVENT_PURCHASE
+  REVIEW
+  PAYMENT
+  PROMO
+  REFUND
+  ADMIN_GRANT
+  CHECK_IN
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  CANCELLED
+  REFUNDED
+  EXPIRED
+}
+
+enum WithdrawStatus {
+  PENDING
+  APPROVED
+  PROCESSING
+  PAID
+  REJECTED
+  FAILED
+}
+
+enum EventStatus {
+  UPCOMING
+  ONGOING
+  FINISHED
+  CANCELLED
+}
+
+enum TicketStatus {
+  ACTIVE
+  USED
+  EXPIRED
+  REFUNDED
+}
+
+enum EventOrderStatus {
+  PENDING
+  PAID
+  CANCELLED
+  EXPIRED
+}
+
+enum PublicPlaceType {
+  TOURISM
+  HOSPITAL
+  SCHOOL
+  PARK
+  MALL
+  TERMINAL
+  OTHER
+}
+
+enum UnitType {
+  FIELD
+  TABLE
+  ROOM
+  COURT
+}
+
+enum BookingType {
+  TIME
+  SESSION
+  NONE
+}
+
+enum NewsStatus {
+  AUTO
+  MANUAL
+  FAILED
+}
+
+enum CourierStatus {
+  OFFLINE
+  ONLINE
+  ON_DELIVERY
+  SUSPENDED
+}
+
+enum VehicleType {
+  MOTORCYCLE
+  CAR
+  BICYCLE
+  WALKING
+}
+
+enum DeliveryStatus {
+  PENDING
+  ASSIGNED
+  PICKED_UP
+  ON_THE_WAY
+  DELIVERED
+  CANCELLED
+}
+
+enum StaffPosition {
+  MANAGER
+  CASHIER
+  RECEPTIONIST
+  CLEANING
+  SECURITY
+  TECHNICIAN
+  OTHER
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum CommunityMemberStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum CommunityMemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum CommunityEventType {
+  MEETUP
+  ONLINE
+  ANNOUNCEMENT
+  WORKSHOP
+  OTHER
+}
+
+enum CommunityEventStatus {
+  UPCOMING
+  ONGOING
+  FINISHED
+  CANCELLED
+}
+
+enum CommentEntityType {
+  COMMUNITY
+  EVENT
+  PUBLIC_PLACE
+}
+
+enum TaskEntityType {
+  COMMUNITY
+  EVENT
+  PUBLIC_PLACE
+}
+
+enum TaskType {
+  ATTEND_EVENT
+  CHECK_IN
+  RATE_PLACE
+  CUSTOM
+}
+
+enum TaskExecutionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum PromotionBannerType {
+  INTERNAL
+  EXTERNAL
+}
+
+enum PromotionEntityType {
+  VENUE
+  EVENT
+  COMMUNITY
+  PUBLIC_PLACE
+  NONE
+}
+
+enum InvoiceEntityType {
+  BOOKING
+  EVENT_ORDER
+  COMMUNITY_EVENT_ORDER
+  TOPUP
+  ORDER
+}
+
+enum AccountType {
+  USER
+  VENUE
+  EVENT
+  COURIER
+  PLATFORM
+  COMMUNITY
+}
+
+enum LedgerDirection {
+  DEBIT
+  CREDIT
+}
+
+enum LedgerReferenceType {
+  TOPUP
+  BOOKING_PAYMENT
+  EVENT_PAYMENT
+  COMMUNITY_EVENT_PAYMENT
+  REFUND
+  WITHDRAWAL
+  SETTLEMENT
+  FEE
+  ADJUSTMENT
+  ORDER
+}
+
+enum CheckInMethod {
+  MANUAL
+  TICKET
+}
+
+enum DiscountType {
+  PERCENT
+  FIXED
+}
+
+enum PromotionType {
+  MENU_DISCOUNT
+  BUNDLE
+  BUY_X_GET_Y
+  ORDER_DISCOUNT
+  FREE_ITEM
+}
+
+enum PromotionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ActivityEntityType {
+  WITHDRAW
+  BOOKING
+  ORDER
+  EVENT
+  COMMUNITY_EVENT
+  DELIVERY
+  PROMOTION
+}
+
+enum ActivityAction {
+  CREATE
+  UPDATE
+  DELETE
+  APPROVE
+  REJECT
+  PROCESS
+  PAID
+  CANCEL
+  EXPIRE
+}
+
+enum ActorType {
+  USER
+  ADMIN
+  SYSTEM
+}
+
+enum NotificationType {
+  WITHDRAW
+  ORDER
+  BOOKING
+  SYSTEM
+}
+
+enum NotificationRecipientType {
+  USER
+  VENUE
+  EVENT
+  COMMUNITY
+  COURIER
+  ADMIN
+}
+
+// #regionUSER & AUTH
+model User {
+  id                  String     @id @default(uuid())
+  name                String
+  username            String?
+  email               String     @unique
+  password            String
+  address             String?
+  roles               UserRole[]
+  phone               String?
+  photo               String?
+  googleId            String?    @unique
+  isVerified          Boolean    @default(false)
+  emailVerifyToken    String?
+  emailVerifyExpiry   DateTime?
+  transactionPin      String?
+  pinFailedCount      Int        @default(0)
+  pinLockedUntil      DateTime?
+  biometricEnabled    Boolean    @default(false)
+  profileViewCount    Int        @default(0)
+  profileLikeCount    Int        @default(0)
+  devices             Device[]
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @default(now()) @updatedAt
+  resetPasswordToken  String?
+  resetPasswordExpire DateTime?
+
+  // Relations
+  bookings         Booking[]
+  notifications    Notification[]
+  locations        LocationTracking[]
+  balance          UserBalance?
+  points           Point[]
+  likedVenues      LikeVenue[]
+  venueImpressions VenueImpression[]
+
+  likedEvents  LikeEvent[]
+  eventReviews ReviewEvent[]
+  eventOrders  EventOrder[]
+  eventTickets EventTicket[]
+
+  likedPlaces      LikePublicPlace[]
+  placeReviews     ReviewPublicPlace[]
+  placeImpressions PublicPlaceImpression[]
+
+  courier         Courier?
+  deliveries      Delivery[]
+  newsImpressions NewsImpression[]
+  newsComments    NewsComment[]
+  courierRatings  CourierRating[]
+
+  ownedCommunities     Community[]
+  communityMemberships CommunityMember[]
+  communityPosts       CommunityPost[]
+  communityReactions   CommunityReaction[]
+  twibbons             CommunityTwibbon[]
+
+  communityEvents       CommunityEvent[]
+  comments              Comment[]
+  commentLikes          CommentLike[]
+  commentReports        CommentReport[]
+  taskExecutions        TaskExecution[]
+  communityPostMentions CommunityPostMention[]
+
+  profileViews              ProfileView[]              @relation("ProfileOwner")
+  profileViewLogs           ProfileView[]              @relation("ProfileViewer")
+  profileLikesReceived      ProfileLike[]              @relation("ProfileLiked")
+  profileLikesGiven         ProfileLike[]              @relation("ProfileLiker")
+  communityEventOrders      CommunityEventOrder[]
+  communityEventTickets     CommunityEventTicket[]
+  promotions                Promotion[]
+  promotionImpressions      PromotionImpression[]
+  promotionClicks           PromotionClick[]
+  userVirtualAccounts       UserVirtualAccount[]
+  orders                    Order[]
+  accounts                  Account[]
+  eventAttendances          EventAttendance[]
+  communityEventAttendances CommunityEventAttendance[]
+  promotionUsages           PromotionUsage[]
+  promotionBanners          PromotionBanner[]
+  venues                    Venue[]
+  ownedEvents               Event[]                    @relation("EventOwner")
+  events                    Event[]                    @relation("EventUser")
+  userInterests             UserInterest[]
+
+  @@index([email])
+  @@index([phone])
+  @@index([createdAt])
+}
+
+model Interest {
+  id    String  @id @default(cuid())
+  name  String  @unique
+  color String?
+
+  users UserInterest[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model UserInterest {
+  id String @id @default(cuid())
+
+  userId     String
+  interestId String
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  interest Interest @relation(fields: [interestId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, interestId])
+}
+
+model ProfileView {
+  id        String   @id @default(uuid())
+  profileId String // user yang dilihat
+  viewerId  String? // user yang melihat (nullable kalau anonymous)
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  profile User  @relation("ProfileOwner", fields: [profileId], references: [id])
+  viewer  User? @relation("ProfileViewer", fields: [viewerId], references: [id])
+
+  @@index([profileId, createdAt])
+  @@index([viewerId])
+}
+
+model ProfileLike {
+  id        String   @id @default(uuid())
+  profileId String // user yang dilike
+  userId    String // user yang melike
+  createdAt DateTime @default(now())
+
+  profile User @relation("ProfileLiked", fields: [profileId], references: [id])
+  user    User @relation("ProfileLiker", fields: [userId], references: [id])
+
+  @@unique([profileId, userId])
+  @@index([profileId])
+  @@index([userId])
+}
+
+model UserRole {
+  id     String @id @default(uuid())
+  userId String
+  role   Role
+
+  venueId     String?
+  eventId     String?
+  communityId String?
+  courierId   String?
+
+  isActive   Boolean  @default(true)
+  assignedAt DateTime @default(now())
+
+  user      User       @relation(fields: [userId], references: [id])
+  venue     Venue?     @relation(fields: [venueId], references: [id])
+  event     Event?     @relation(fields: [eventId], references: [id])
+  community Community? @relation(fields: [communityId], references: [id])
+  courier   Courier?   @relation(fields: [courierId], references: [id])
+
+  @@unique([userId, role, venueId], map: "unique_venue_role")
+  @@unique([userId, role, eventId], map: "unique_event_role")
+  @@unique([userId, role, communityId], map: "unique_community_role")
+  @@index([userId])
+  @@index([role])
+  @@index([venueId])
+  @@index([eventId])
+  @@index([courierId])
+  @@index([communityId])
+}
+
+model UserBalance {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  balance   Decimal  @default(0) @db.Decimal(18, 2)
+  updatedAt DateTime @default(now()) @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model EventBalance {
+  id        String   @id @default(uuid())
+  eventId   String   @unique
+  balance   Decimal  @default(0) @db.Decimal(18, 2)
+  updatedAt DateTime @default(now()) @updatedAt
+
+  event Event @relation(fields: [eventId], references: [id])
+}
+
+model CommunityBalance {
+  id          String   @id @default(uuid())
+  communityId String   @unique
+  balance     Decimal  @default(0) @db.Decimal(18, 2)
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  community Community @relation(fields: [communityId], references: [id])
+}
+
+model Device {
+  id           String    @id @default(uuid())
+  userId       String?
+  token        String
+  expoToken    String
+  platform     String?
+  osName       String?
+  buildId      String?
+  osVersion    String?
+  deviceModel  String?
+  isOnline     Boolean   @default(false)
+  lastActiveAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user    User?   @relation(fields: [userId], references: [id])
+  venue   Venue?  @relation(fields: [venueId], references: [id])
+  venueId String?
+
+  @@unique([token, userId])
+  @@index([userId])
+}
+
+model LocationTracking {
+  id        String   @id @default(uuid())
+  userId    String
+  latitude  Float
+  longitude Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+}
+
+model ActivityLog {
+  id String @id @default(uuid())
+
+  actorId   String?
+  actorType ActorType?
+
+  entityType ActivityEntityType
+  entityId   String
+
+  action ActivityAction
+
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+}
+
+// #region VENUE CORE
+model Venue {
+  id            String   @id @default(uuid())
+  name          String
+  address       String
+  city          String
+  province      String
+  description   String
+  ownerId       String?
+  latitude      Float?
+  longitude     Float?
+  image         String?
+  gallery       String[] @default([])
+  isActive      Boolean  @default(false)
+  averageRating Float    @default(0)
+  totalReviews  Int      @default(0)
+  totalLikes    Int      @default(0)
+  totalViews    Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @default(now()) @updatedAt
+
+  services VenueService[]
+  units    VenueUnit[]
+  owner    User?          @relation(fields: [ownerId], references: [id])
+
+  // Relations
+  devices          Device[]
+  floors           Floor[]
+  bookings         Booking[]
+  operationalHours OperationalHour[]
+  invitation       InvitationKey[]
+  balance          VenueBalance?
+  withdrawRequests WithdrawRequest[]
+  likes            LikeVenue[]
+  impressions      VenueImpression[]
+  events           Event[]
+  menus            Menu[]
+  staffs           VenueStaff[]
+  userRoles        UserRole[]
+  orders           Order[]
+  accounts         Account[]
+  promotions       Promotion[]
+
+  @@index([city])
+  @@index([province])
+  @@index([isActive])
+  @@index([createdAt])
+}
+
+model VenueStaff {
+  id      String @id @default(uuid())
+  venueId String
+
+  name     String
+  phone    String?
+  position StaffPosition @default(OTHER)
+
+  gender           Gender?
+  birthDate        DateTime?
+  address          String?
+  emergencyContact String?
+  photo            String?
+  note             String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  venue Venue @relation(fields: [venueId], references: [id])
+
+  @@index([venueId])
+}
+
+model VenueCategory {
+  id       String  @id @default(uuid())
+  name     String // Sport, Food, Entertainment, dll
+  code     String  @unique
+  icon     String?
+  isActive Boolean @default(true)
+
+  subCategories VenueSubCategory[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+}
+
+model VenueSubCategory {
+  id            String  @id @default(uuid())
+  categoryId    String
+  name          String // Mini Soccer, Cafe, Billiard
+  code          String  @unique
+  description   String?
+  defaultConfig Json // TEMPLATE CONFIG
+  isActive      Boolean @default(true)
+
+  category VenueCategory  @relation(fields: [categoryId], references: [id])
+  services VenueService[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([categoryId])
+  @@index([isActive])
+}
+
+model VenueService {
+  id            String @id @default(uuid())
+  venueId       String
+  subCategoryId String
+
+  config      Json
+  image       String?
+  unitType    UnitType?
+  bookingType BookingType?
+
+  isActive Boolean @default(true)
+
+  venue       Venue            @relation(fields: [venueId], references: [id])
+  subCategory VenueSubCategory @relation(fields: [subCategoryId], references: [id])
+
+  units    VenueUnit[]
+  menus    Menu[]
+  bookings Booking[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([venueId, subCategoryId])
+  @@index([venueId])
+  @@index([subCategoryId])
+  @@index([isActive])
+}
+
+model InvitationKey {
+  id    String @id @default(uuid())
+  key   String @unique
+  email String
+  role  Role
+
+  venueId     String?
+  eventId     String?
+  communityId String?
+
+  usedAt    DateTime?
+  expiresAt DateTime?
+
+  venue     Venue?     @relation(fields: [venueId], references: [id])
+  event     Event?     @relation(fields: [eventId], references: [id])
+  community Community? @relation(fields: [communityId], references: [id])
+}
+
+model VenueBalance {
+  id        String   @id @default(uuid())
+  venueId   String   @unique
+  balance   Decimal  @default(0) @db.Decimal(18, 2)
+  updatedAt DateTime @default(now()) @updatedAt
+
+  venue Venue @relation(fields: [venueId], references: [id])
+}
+
+// #region VENUE STRUCTURE
+model Floor {
+  id      String @id @default(uuid())
+  name    String
+  level   Int?
+  venueId String
+  venue   Venue  @relation(fields: [venueId], references: [id])
+
+  units VenueUnit[]
+}
+
+model VenueUnit {
+  id        String  @id @default(uuid())
+  venueId   String
+  serviceId String
+  floorId   String?
+
+  name     String
+  type     UnitType
+  price    Decimal  @db.Decimal(18, 2)
+  isActive Boolean  @default(true)
+
+  floor   Floor?       @relation(fields: [floorId], references: [id])
+  venue   Venue        @relation(fields: [venueId], references: [id])
+  service VenueService @relation(fields: [serviceId], references: [id])
+
+  booking Booking[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([venueId])
+  @@index([serviceId])
+  @@index([isActive])
+}
+
+model OperationalHour {
+  id        String @id @default(uuid())
+  venueId   String
+  dayOfWeek Int
+  opensAt   Int
+  closesAt  Int
+
+  venue Venue @relation(fields: [venueId], references: [id])
+
+  @@index([venueId, dayOfWeek])
+}
+
+// #region BOOKING & ORDER
+model Booking {
+  id         String        @id @default(uuid())
+  userId     String
+  venueId    String
+  serviceId  String
+  unitId     String?
+  startTime  DateTime
+  endTime    DateTime
+  totalPrice Decimal       @db.Decimal(18, 2)
+  status     BookingStatus @default(PENDING)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @default(now()) @updatedAt
+
+  user       User         @relation(fields: [userId], references: [id])
+  venue      Venue        @relation(fields: [venueId], references: [id])
+  service    VenueService @relation(fields: [serviceId], references: [id])
+  unit       VenueUnit?   @relation(fields: [unitId], references: [id])
+  orderItems OrderItem[]
+  review     Review?
+  delivery   Delivery?
+  orders     Order[]
+
+  @@index([userId])
+  @@index([venueId])
+  @@index([serviceId])
+  @@index([status])
+  @@index([startTime, endTime])
+  @@index([venueId, startTime, endTime])
+  @@index([serviceId, unitId, status])
+}
+
+model Menu {
+  id      String @id @default(uuid())
+  venueId String
+
+  name        String
+  price       Decimal  @db.Decimal(18, 2)
+  category    String
+  image       String?
+  isAvailable Boolean  @default(true)
+  isDeleted   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  venue          Venue           @relation(fields: [venueId], references: [id])
+  orderItems     OrderItem[]
+  venueService   VenueService?   @relation(fields: [venueServiceId], references: [id])
+  venueServiceId String?
+  promotionItems PromotionItem[]
+
+  @@index([venueId])
+}
+
+model Promotion {
+  id String @id @default(uuid())
+
+  venueId String?
+
+  title       String
+  description String?
+
+  type PromotionType
+
+  discountType  DiscountType?
+  discountValue Decimal?      @db.Decimal(10, 2)
+
+  minOrderAmount Decimal? @db.Decimal(10, 2)
+  priority       Int      @default(0)
+  stackable      Boolean  @default(true)
+
+  startAt DateTime
+  endAt   DateTime
+
+  maxUsage   Int?
+  usageCount Int  @default(0)
+
+  perUserLimit Int?
+
+  promoCode String?
+
+  isActive Boolean         @default(false)
+  status   PromotionStatus @default(PENDING)
+
+  approvedBy String?
+  approvedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  venue Venue? @relation(fields: [venueId], references: [id])
+
+  items                PromotionItem[]
+  user                 User?                 @relation(fields: [userId], references: [id])
+  userId               String?
+  promotionUsages      PromotionUsage[]
+  promotionSchedules   PromotionSchedule[]
+  promotionImpressions PromotionImpression[]
+  promotionClicks      PromotionClick[]
+
+  @@index([venueId])
+@@index([userId])
+}
+
+model PromotionItem {
+  id String @id @default(uuid())
+
+  promotionId String
+
+  menuId String?
+
+  quantity Int?
+
+  isReward Boolean @default(false)
+
+  promotion Promotion @relation(fields: [promotionId], references: [id])
+  menu      Menu?     @relation(fields: [menuId], references: [id])
+
+  @@index([promotionId])
+}
+
+model PromotionUsage {
+  id String @id @default(uuid())
+
+  promotionId String
+  userId      String
+  orderId     String?
+
+  usedAt DateTime @default(now())
+
+  promotion Promotion @relation(fields: [promotionId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
+  order     Order?    @relation(fields: [orderId], references: [id])
+
+  @@index([promotionId])
+  @@index([userId])
+}
+
+model PromotionSchedule {
+  id String @id @default(uuid())
+
+  promotionId String
+
+  dayOfWeek Int?
+
+  startHour Int?
+  endHour   Int?
+
+  promotion Promotion @relation(fields: [promotionId], references: [id])
+}
+
+model Order {
+  id        String  @id @default(uuid())
+  userId    String
+  venueId   String
+  bookingId String? // optional
+
+  total    Decimal           @db.Decimal(18, 2)
+  discount Decimal           @default(0)
+  status   TransactionStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User     @relation(fields: [userId], references: [id])
+  venue   Venue    @relation(fields: [venueId], references: [id])
+  booking Booking? @relation(fields: [bookingId], references: [id])
+
+  items           OrderItem[]
+  promotionUsages PromotionUsage[]
+}
+
+model OrderItem {
+  id       String  @id @default(uuid())
+  orderId  String
+  menuId   String
+  quantity Int
+  subtotal Decimal @db.Decimal(18, 2)
+
+  order     Order    @relation(fields: [orderId], references: [id])
+  menu      Menu     @relation(fields: [menuId], references: [id])
+  booking   Booking? @relation(fields: [bookingId], references: [id])
+  bookingId String?
+}
+
+model Review {
+  id        String   @id @default(uuid())
+  bookingId String   @unique
+  rating    Float
+  comment   String?
+  image     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+
+  @@index([rating])
+  @@index([bookingId])
+}
+
+// #region FINANCIAL / PAYMENT
+
+model Payment {
+  id String @id @default(uuid())
+
+  invoiceId String
+  amount    Decimal @db.Decimal(18, 2)
+
+  method      String? // VA, QRIS, WALLET
+  provider    String? // Midtrans, Xendit, dll
+  providerRef String? // id dari gateway
+
+  vaNumber String?
+  bankCode String?
+  qrisUrl  String?
+
+  status    TransactionStatus @default(PENDING)
+  expiredAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@index([status])
+  @@index([providerRef])
+  @@index([invoiceId])
+}
+
+model Account {
+  id String @id @default(uuid())
+
+  type             AccountType
+  userId           String?     @unique
+  venueId          String?     @unique
+  courierId        String?     @unique
+  eventId          String?     @unique
+  communityEventId String?     @unique
+
+  user           User?           @relation(fields: [userId], references: [id])
+  venue          Venue?          @relation(fields: [venueId], references: [id])
+  courier        Courier?        @relation(fields: [courierId], references: [id])
+  event          Event?          @relation(fields: [eventId], references: [id])
+  communityEvent CommunityEvent? @relation(fields: [communityEventId], references: [id])
+  isPlatform     Boolean         @default(false)
+
+  ledgerEntries LedgerEntry[]
+
+  createdAt        DateTime          @default(now())
+  withdrawRequests WithdrawRequest[]
+  community        Community?        @relation(fields: [communityId], references: [id])
+  communityId      String?
+
+  @@unique([userId], map: "unique_user_account")
+  @@unique([venueId], map: "unique_venue_account")
+  @@unique([eventId], map: "unique_event_account")
+  @@unique([communityEventId], map: "unique_community_event_account")
+  @@unique([courierId], map: "unique_courier_account")
+  @@index([type])
+}
+
+model LedgerEntry {
+  id String @id @default(uuid())
+
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id])
+
+  type   LedgerDirection
+  amount Decimal         @db.Decimal(18, 2)
+
+  referenceType LedgerReferenceType?
+  referenceId   String?
+
+  createdAt DateTime @default(now())
+
+  @@index([accountId])
+  @@index([createdAt])
+  @@index([referenceType, referenceId])
+}
+
+// model LedgerEntry {
+//   id String @id @default(uuid())
+
+//   accountId String
+//   account   Account @relation(fields: [accountId], references: [id])
+
+//   type   LedgerDirection
+//   amount Decimal @db.Decimal(18,2)
+
+//   referenceType LedgerReferenceType?
+
+//   eventId String?
+//   event   Event? @relation(fields: [eventId], references: [id])
+
+//   venueId String?
+//   venue   Venue? @relation(fields: [venueId], references: [id])
+
+//   bookingId String?
+//   booking   Booking? @relation(fields: [bookingId], references: [id])
+
+//   orderId String?
+//   order   Order? @relation(fields: [orderId], references: [id])
+
+//   communityEventId String?
+//   communityEvent   CommunityEvent? @relation(fields: [communityEventId], references: [id])
+
+//   createdAt DateTime @default(now())
+// }
+
+model UserVirtualAccount {
+  id       String  @id @default(uuid())
+  userId   String
+  bank     String
+  vaNumber String
+  isActive Boolean @default(true)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, bank])
+}
+
+model Invoice {
+  id String @id @default(uuid())
+
+  entityType InvoiceEntityType
+  entityId   String
+
+  invoiceNumber String  @unique
+  amount        Decimal @db.Decimal(18, 2)
+
+  status    InvoiceStatus @default(PENDING)
+  expiredAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  payments Payment[]
+
+  @@index([entityType, entityId])
+}
+
+model WithdrawRequest {
+  id String @id @default(uuid())
+
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id])
+
+  withdrawNumber String @unique
+
+  amount    Decimal @db.Decimal(18, 2)
+  fee       Decimal @default(0) @db.Decimal(18, 2)
+  netAmount Decimal @db.Decimal(18, 2)
+
+  status        WithdrawStatus @default(PENDING)
+  failureReason String?
+
+  bankCode    String
+  bankAccount String
+  accountName String
+
+  requestedAt DateTime  @default(now())
+  approvedAt  DateTime?
+  rejectedAt  DateTime?
+  paidAt      DateTime?
+
+  approvedBy String?
+  rejectedBy String?
+  paidBy     String?
+
+  proofUrl String?
+  note     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  venue     Venue?   @relation(fields: [venueId], references: [id])
+  venueId   String?
+
+  @@index([accountId, status])
+}
+
+model PlatformBalance {
+  id        String   @id @default(uuid())
+  balance   Decimal  @default(0) @db.Decimal(18, 2)
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+// #region POINTS SYSTEM
+model Point {
+  id        String            @id @default(uuid())
+  userId    String
+  activity  PointActivityType
+  points    Int
+  reference String? // id dari booking, transaction, dsb
+  createdAt DateTime          @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+// #region VENUE INTERACTIONS
+model LikeVenue {
+  id        String   @id @default(uuid())
+  userId    String
+  venueId   String
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id])
+  venue Venue @relation(fields: [venueId], references: [id])
+
+  @@unique([userId, venueId])
+  @@index([userId])
+  @@index([venueId])
+}
+
+model VenueImpression {
+  id        String   @id @default(uuid())
+  venueId   String
+  userId    String?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  venue Venue @relation(fields: [venueId], references: [id])
+  user  User? @relation(fields: [userId], references: [id])
+
+  @@index([venueId, createdAt])
+}
+
+// #region EVENTS INTERACTION
+model ReviewEvent {
+  id        String   @id @default(uuid())
+  eventId   String
+  userId    String
+  rating    Float
+  comment   String?
+  image     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  event Event @relation(fields: [eventId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
+
+  @@unique([userId, eventId])
+}
+
+model LikeEvent {
+  id        String   @id @default(uuid())
+  userId    String
+  eventId   String
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id])
+  event Event @relation(fields: [eventId], references: [id])
+
+  @@unique([userId, eventId])
+  @@index([userId])
+  @@index([eventId])
+}
+
+// #region PUBLIC PLACE INTERACTIONS
+model ReviewPublicPlace {
+  id        String   @id @default(uuid())
+  userId    String
+  placeId   String
+  rating    Float
+  comment   String?
+  image     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  user  User        @relation(fields: [userId], references: [id])
+  place PublicPlace @relation(fields: [placeId], references: [id])
+
+  @@unique([userId, placeId])
+}
+
+model LikePublicPlace {
+  id        String   @id @default(uuid())
+  userId    String
+  placeId   String
+  createdAt DateTime @default(now())
+
+  user  User        @relation(fields: [userId], references: [id])
+  place PublicPlace @relation(fields: [placeId], references: [id])
+
+  @@unique([userId, placeId])
+  @@index([userId])
+  @@index([placeId])
+}
+
+model PublicPlaceImpression {
+  id        String   @id @default(uuid())
+  placeId   String
+  userId    String?
+  createdAt DateTime @default(now())
+
+  place PublicPlace @relation(fields: [placeId], references: [id])
+  user  User?       @relation(fields: [userId], references: [id])
+
+  @@index([placeId, createdAt])
+}
+
+// #region EVENTS & PUBLIC PLACES CORE
+
+model Event {
+  id          String  @id @default(uuid())
+  venueId     String?
+  communityId String?
+  ownerId     String?
+  userId      String?
+
+  name          String
+  description   String
+  image         String?
+  startAt       DateTime
+  endAt         DateTime
+  capacity      Int?
+  location      String
+  latitude      Float?
+  longitude     Float?
+  status        EventStatus @default(UPCOMING)
+  isActive      Boolean     @default(true)
+  includeTicket Boolean     @default(false)
+  averageRating Float       @default(0)
+  totalReviews  Int         @default(0)
+  totalLikes    Int         @default(0)
+  totalViews    Int         @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  venue     Venue?     @relation(fields: [venueId], references: [id])
+  community Community? @relation(fields: [communityId], references: [id])
+
+  owner User? @relation("EventOwner", fields: [ownerId], references: [id])
+  user  User? @relation("EventUser", fields: [userId], references: [id])
+
+  reviews ReviewEvent[]
+  likes   LikeEvent[]
+
+  ticketTypes      EventTicketType[]
+  orders           EventOrder[]
+  tickets          EventTicket[]
+  userRoles        UserRole[]
+  invitationKeys   InvitationKey[]
+  eventBalance     EventBalance?
+  eventAttendances EventAttendance[]
+  account          Account?
+
+  @@index([venueId])
+  @@index([status])
+  @@index([startAt, endAt])
+}
+
+model EventTicketType {
+  id          String  @id @default(uuid())
+  eventId     String
+  name        String
+  price       Decimal @db.Decimal(18, 2)
+  quota       Int
+  sold        Int     @default(0)
+  description String?
+  isActive    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  event   Event         @relation(fields: [eventId], references: [id])
+  tickets EventTicket[]
+
+  @@index([eventId])
+}
+
+model EventOrder {
+  id      String           @id @default(uuid())
+  userId  String
+  eventId String
+  total   Decimal          @db.Decimal(18, 2)
+  status  EventOrderStatus @default(PENDING)
+
+  idempotencyKey String?   @unique
+  expiresAt      DateTime?
+
+  qrCode String? @unique
+
+  isCheckedIn Boolean   @default(false)
+  checkedInAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User          @relation(fields: [userId], references: [id])
+  event   Event         @relation(fields: [eventId], references: [id])
+  tickets EventTicket[]
+
+  @@index([userId])
+  @@index([eventId])
+  @@index([status])
+}
+
+model EventTicket {
+  id           String @id @default(uuid())
+  ticketTypeId String
+  eventId      String
+  userId       String
+  orderId      String
+
+  status TicketStatus @default(ACTIVE)
+  usedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  user             User              @relation(fields: [userId], references: [id])
+  event            Event             @relation(fields: [eventId], references: [id])
+  order            EventOrder        @relation(fields: [orderId], references: [id])
+  ticketType       EventTicketType   @relation(fields: [ticketTypeId], references: [id])
+  eventAttendances EventAttendance[]
+
+  @@index([userId])
+  @@index([eventId])
+  @@index([status])
+}
+
+model EventAttendance {
+  id      String @id @default(uuid())
+  eventId String
+  userId  String
+
+  checkInMethod CheckInMethod // MANUAL | TICKET
+  ticketId      String? // jika via ticket
+
+  checkedInAt DateTime @default(now())
+
+  event  Event        @relation(fields: [eventId], references: [id])
+  user   User         @relation(fields: [userId], references: [id])
+  ticket EventTicket? @relation(fields: [ticketId], references: [id])
+
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([userId])
+}
+
+model PublicPlace {
+  id            String          @id @default(uuid())
+  name          String
+  type          PublicPlaceType
+  address       String
+  description   String?
+  latitude      Float?
+  longitude     Float?
+  image         String?
+  gallery       String[]        @default([])
+  isActive      Boolean         @default(true)
+  averageRating Float           @default(0)
+  totalReviews  Int             @default(0)
+  totalLikes    Int             @default(0)
+  totalViews    Int             @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  reviews     ReviewPublicPlace[]
+  likes       LikePublicPlace[]
+  impressions PublicPlaceImpression[]
+}
+
+// #region NOTIFICATIONS
+model Notification {
+  id String @id @default(uuid())
+
+  recipientType NotificationRecipientType
+  recipientId   String
+
+  title   String
+  message String
+
+  type     NotificationType
+  entityId String?
+
+  image String?
+
+  isRead    Boolean @default(false)
+  isGlobal  Boolean @default(false)
+  adminOnly Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User?    @relation(fields: [userId], references: [id])
+  userId    String?
+
+  @@index([recipientType, recipientId])
+  @@index([type])
+}
+
+// #region NEWS
+model News {
+  id          String     @id @default(uuid())
+  sourceUrl   String
+  title       String
+  description String
+  image       String?
+  source      String
+  status      NewsStatus
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @default(now()) @updatedAt
+  totalViews  Int        @default(0)
+
+  newsImpressions NewsImpression[]
+  newsComments    NewsComment[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model NewsImpression {
+  id          String   @id @default(uuid())
+  newsId      String
+  userId      String
+  ipAddress   String?
+  userAgent   String?
+  isAnonymous Boolean  @default(false)
+  totalViews  Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  news News  @relation(fields: [newsId], references: [id])
+  user User? @relation(fields: [userId], references: [id])
+
+  @@unique([newsId, userId])
+  @@index([newsId, createdAt])
+}
+
+model NewsComment {
+  id        String   @id @default(uuid())
+  newsId    String
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  news News @relation(fields: [newsId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([newsId])
+  @@index([userId])
+}
+
+// #region COURIER CORE
+model Courier {
+  id     String        @id @default(uuid())
+  userId String        @unique
+  status CourierStatus @default(OFFLINE)
+
+  vehicleType VehicleType
+  plateNumber String?
+  photo       String?
+
+  rating     Float @default(0)
+  totalTrips Int   @default(0)
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  deliveries Delivery[]
+  locations  CourierLocation[]
+
+  courierRatings          CourierRating[]
+  courierAvailabilityLogs CourierAvailabilityLog[]
+  courierEarnings         CourierEarnings[]
+  accounts                Account[]
+  userRoles               UserRole[]
+
+  @@index([status])
+  @@index([vehicleType])
+}
+
+model Delivery {
+  id        String  @id @default(uuid())
+  courierId String?
+  userId    String?
+  bookingId String? @unique
+
+  pickupAddress  String
+  dropoffAddress String
+
+  status         DeliveryStatus @default(PENDING)
+  attemptCount   Int            @default(0)
+  lastAssignedAt DateTime?
+
+  assignedAt  DateTime?
+  pickedUpAt  DateTime?
+  deliveredAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rejectedCouriers DeliveryRejectedCourier[]
+  assignmentLogs   DeliveryAssignmentLog[]
+
+  courier Courier? @relation(fields: [courierId], references: [id])
+  user    User?    @relation(fields: [userId], references: [id])
+  booking Booking? @relation(fields: [bookingId], references: [id])
+
+  @@index([courierId, status])
+  @@index([bookingId])
+  @@index([status])
+}
+
+model DeliveryAssignmentLog {
+  id         String   @id @default(uuid())
+  deliveryId String
+  courierId  String
+  status     String // ASSIGNED | REJECTED | TIMEOUT
+  createdAt  DateTime @default(now())
+  delivery   Delivery @relation(fields: [deliveryId], references: [id])
+
+  @@index([deliveryId])
+  @@index([courierId])
+}
+
+model DeliveryRejectedCourier {
+  id         String   @id @default(uuid())
+  deliveryId String
+  courierId  String
+  delivery   Delivery @relation(fields: [deliveryId], references: [id])
+
+  @@unique([deliveryId, courierId])
+}
+
+model CourierLocation {
+  id        String   @id @default(uuid())
+  courierId String   @unique
+  latitude  Float
+  longitude Float
+  updatedAt DateTime @default(now()) @updatedAt
+
+  courier Courier @relation(fields: [courierId], references: [id])
+
+  @@index([courierId, updatedAt])
+}
+
+model CourierRating {
+  id        String   @id @default(uuid())
+  courierId String
+  userId    String
+  rating    Float
+  comment   String?
+  tripId    String?
+  createdAt DateTime @default(now())
+
+  courier Courier @relation(fields: [courierId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@index([courierId])
+  @@index([userId])
+}
+
+model CourierAvailabilityLog {
+  id        String        @id @default(uuid())
+  courierId String
+  status    CourierStatus
+  note      String? // opsional, misal alasan OFFLINE / SUSPENDED
+  createdAt DateTime      @default(now())
+
+  courier Courier @relation(fields: [courierId], references: [id])
+
+  @@index([courierId, createdAt])
+}
+
+model CourierEarnings {
+  id            String   @id @default(uuid())
+  courierId     String
+  periodStart   DateTime // awal periode penghitungan
+  periodEnd     DateTime // akhir periode penghitungan
+  totalTrips    Int      @default(0)
+  totalEarnings Decimal  @default(0) @db.Decimal(18, 2)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @default(now()) @updatedAt
+
+  courier Courier @relation(fields: [courierId], references: [id])
+
+  @@index([courierId, periodStart, periodEnd])
+}
+
+// #region COMMUNITY
+model Community {
+  id           String   @id @default(uuid())
+  name         String
+  description  String?
+  image        String?
+  ownerId      String?
+  waContact    String?
+  phoneContact String?
+  emailContact String?
+  basecamp     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  owner   User?             @relation(fields: [ownerId], references: [id])
+  members CommunityMember[]
+  posts   CommunityPost[]
+
+  hostedEvents   Event[] // Event besar / ticketing
+  internalEvents CommunityEvent[]
+
+  twibbons                     CommunityTwibbon[]
+  invitation                   InvitationKey[]
+  communityEventCollaborations CommunityEventCollaboration[]
+  task                         Task[]
+  communityBalance             CommunityBalance?
+  userRoles                    UserRole[]
+  accounts                     Account[]
+
+  @@index([ownerId])
+  @@index([createdAt])
+}
+
+model CommunityMember {
+  id          String                @id @default(uuid())
+  communityId String
+  userId      String
+  role        CommunityMemberRole   @default(MEMBER)
+  status      CommunityMemberStatus @default(PENDING)
+  joinedAt    DateTime              @default(now())
+
+  community Community @relation(fields: [communityId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@unique([communityId, userId])
+  @@index([communityId])
+  @@index([userId])
+}
+
+model CommunityPost {
+  id          String   @id @default(uuid())
+  communityId String
+  adminId     String // harus admin komunitas
+  content     String
+  image       String?
+  link        String? // optional link/file
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  community             Community              @relation(fields: [communityId], references: [id])
+  admin                 User                   @relation(fields: [adminId], references: [id])
+  reactions             CommunityReaction[]
+  communityPostMentions CommunityPostMention[]
+
+  @@index([communityId])
+  @@index([adminId])
+}
+
+model CommunityPostMention {
+  id        String   @id @default(uuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post CommunityPost @relation(fields: [postId], references: [id])
+  user User          @relation(fields: [userId], references: [id])
+
+  @@unique([postId, userId]) // anti double tag
+}
+
+model CommunityReaction {
+  id        String   @id @default(uuid())
+  postId    String
+  userId    String
+  type      String // misal "LIKE" atau emoji
+  createdAt DateTime @default(now())
+
+  post CommunityPost @relation(fields: [postId], references: [id])
+  user User          @relation(fields: [userId], references: [id])
+
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
+}
+
+model CommunityEvent {
+  id          String @id @default(uuid())
+  communityId String
+  createdById String
+
+  title       String
+  description String?
+  image       String?
+  type        CommunityEventType @default(MEETUP)
+
+  startAt DateTime
+  endAt   DateTime?
+
+  location    String?
+  latitude    Float?
+  longitude   Float?
+  meetingLink String?
+
+  status        CommunityEventStatus @default(UPCOMING)
+  isPublic      Boolean              @default(true)
+  includeTicket Boolean              @default(false)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  community Community @relation(fields: [communityId], references: [id])
+  createdBy User      @relation(fields: [createdById], references: [id])
+
+  collaborations            CommunityEventCollaboration[]
+  communityEventTicketTypes CommunityEventTicketType[]
+  communityEventOrders      CommunityEventOrder[]
+  communityEventTickets     CommunityEventTicket[]
+  communityEventAttendances CommunityEventAttendance[]
+  account                   Account?
+
+  @@index([communityId])
+  @@index([startAt])
+  @@index([status])
+}
+
+model CommunityTwibbon {
+  id          String @id @default(uuid())
+  communityId String
+  createdById String
+
+  title        String
+  description  String?
+  frameImage   String // PNG transparan
+  previewImage String?
+  isActive     Boolean @default(true)
+
+  startAt DateTime?
+  endAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  community Community @relation(fields: [communityId], references: [id])
+  createdBy User      @relation(fields: [createdById], references: [id])
+
+  @@index([communityId])
+  @@index([isActive])
+}
+
+model CommunityEventCollaboration {
+  id          String @id @default(uuid())
+  eventId     String
+  communityId String
+  role        String @default("CO_HOST")
+
+  createdAt DateTime @default(now())
+
+  event     CommunityEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  community Community      @relation(fields: [communityId], references: [id])
+
+  @@unique([eventId, communityId])
+}
+
+model CommunityEventTicketType {
+  id               String  @id @default(uuid())
+  communityEventId String
+  name             String
+  price            Decimal @db.Decimal(18, 2)
+  quota            Int
+  sold             Int     @default(0)
+  description      String?
+  isActive         Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  communityEvent CommunityEvent         @relation(fields: [communityEventId], references: [id])
+  tickets        CommunityEventTicket[]
+
+  @@index([communityEventId])
+}
+
+model CommunityEventAttendance {
+  id      String @id @default(uuid())
+  eventId String
+  userId  String
+
+  checkInMethod CheckInMethod // MANUAL | TICKET
+  ticketId      String? // jika via ticket
+
+  checkedInAt DateTime @default(now())
+
+  event  CommunityEvent        @relation(fields: [eventId], references: [id])
+  user   User                  @relation(fields: [userId], references: [id])
+  ticket CommunityEventTicket? @relation(fields: [ticketId], references: [id])
+
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([userId])
+}
+
+model CommunityEventOrder {
+  id               String           @id @default(uuid())
+  userId           String
+  communityEventId String
+  total            Float
+  status           EventOrderStatus @default(PENDING)
+  idempotencyKey   String?          @unique
+  expiresAt        DateTime?
+  qrCode           String           @unique
+
+  isCheckedIn Boolean   @default(false)
+  checkedInAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user           User                   @relation(fields: [userId], references: [id])
+  communityEvent CommunityEvent         @relation(fields: [communityEventId], references: [id])
+  tickets        CommunityEventTicket[]
+
+  @@index([userId])
+  @@index([communityEventId])
+  @@index([status])
+}
+
+model CommunityEventTicket {
+  id               String @id @default(uuid())
+  ticketTypeId     String
+  communityEventId String
+  userId           String
+  orderId          String
+
+  status TicketStatus @default(ACTIVE)
+  usedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  user                      User                       @relation(fields: [userId], references: [id])
+  communityEvent            CommunityEvent             @relation(fields: [communityEventId], references: [id])
+  ticketType                CommunityEventTicketType   @relation(fields: [ticketTypeId], references: [id])
+  order                     CommunityEventOrder        @relation(fields: [orderId], references: [id])
+  communityEventAttendances CommunityEventAttendance[]
+
+  @@index([userId])
+  @@index([communityEventId])
+  @@index([status])
+}
+
+model Comment {
+  id      String @id @default(uuid())
+  userId  String
+  content String
+
+  entityType CommentEntityType
+  entityId   String
+
+  parentId String?
+
+  likeCount   Int @default(0)
+  reportCount Int @default(0)
+
+  isHidden  Boolean @default(false)
+  isDeleted Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user           User            @relation(fields: [userId], references: [id])
+  parent         Comment?        @relation("CommentReply", fields: [parentId], references: [id])
+  replies        Comment[]       @relation("CommentReply")
+  commentLikes   CommentLike[]
+  commentReports CommentReport[]
+
+  @@index([entityType, entityId])
+}
+
+model CommentLike {
+  id        String @id @default(uuid())
+  commentId String
+  userId    String
+
+  createdAt DateTime @default(now())
+
+  comment Comment @relation(fields: [commentId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([commentId, userId])
+}
+
+model CommentReport {
+  id        String @id @default(uuid())
+  commentId String
+  userId    String
+  reason    String
+
+  createdAt DateTime @default(now())
+
+  comment Comment @relation(fields: [commentId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([commentId, userId])
+}
+
+model UserPresenceSnapshot {
+  id        String   @id @default(uuid())
+  userId    String
+  context   String
+  contextId String?
+  lastSeen  DateTime
+
+  @@index([context, contextId])
+  @@index([userId])
+}
+
+model Task {
+  id String @id @default(uuid())
+
+  entityType  TaskEntityType
+  entityId    String
+  communityId String?
+
+  title       String
+  description String?
+  type        TaskType
+
+  rule Json // radius, qr required, dll
+
+  requiresQr  Boolean @default(false)
+  requiresGeo Boolean @default(false)
+
+  startAt DateTime?
+  endAt   DateTime?
+
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  executions     TaskExecution[]
+  community      Community?      @relation(fields: [communityId], references: [id])
+  taskQrSessions TaskQrSession[]
+
+  @@index([entityType, entityId])
+}
+
+model TaskExecution {
+  id     String @id @default(uuid())
+  taskId String
+  userId String
+
+  status TaskExecutionStatus @default(PENDING)
+
+  qrSessionId String?
+  latitude    Float?
+  longitude   Float?
+
+  proof       Json?
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([taskId, userId])
+}
+
+model TaskQrSession {
+  id     String @id @default(uuid())
+  taskId String
+
+  token     String   @unique
+  expiresAt DateTime
+  isActive  Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id])
+
+  @@index([taskId])
+  @@index([expiresAt])
+}
+
+model PromotionBanner {
+  id          String  @id @default(uuid())
+  title       String
+  description String?
+  image       String // banner image (wajib)
+  mobileImage String? // optional versi mobile crop
+
+  type       PromotionBannerType @default(INTERNAL)
+  entityType PromotionEntityType @default(NONE)
+  entityId   String? // id venue/event/community/place
+
+  redirectUrl String? // untuk external link
+
+  isActive Boolean @default(true)
+  isGlobal Boolean @default(true)
+
+  priority Int @default(0) // urutan tampil (lebih tinggi lebih atas)
+
+  startAt DateTime?
+  endAt   DateTime?
+
+  totalViews  Int @default(0)
+  totalClicks Int @default(0)
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy User? @relation(fields: [createdById], references: [id])
+
+  impressions PromotionImpression[]
+  clicks      PromotionClick[]
+
+  @@index([isActive])
+  @@index([startAt, endAt])
+  @@index([priority])
+  @@index([entityType, entityId])
+}
+
+model PromotionImpression {
+  id          String   @id @default(uuid())
+  promotionId String
+  userId      String?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  promotion         Promotion        @relation(fields: [promotionId], references: [id])
+  user              User?            @relation(fields: [userId], references: [id])
+  promotionBanner   PromotionBanner? @relation(fields: [promotionBannerId], references: [id])
+  promotionBannerId String?
+
+  @@index([promotionId, createdAt])
+}
+
+model PromotionClick {
+  id                String   @id @default(uuid())
+  promotionId       String
+  userId            String?
+  createdAt         DateTime @default(now())
+  promotionBannerId String?
+
+  promotion       Promotion        @relation(fields: [promotionId], references: [id])
+  user            User?            @relation(fields: [userId], references: [id])
+  promotionBanner PromotionBanner? @relation(fields: [promotionBannerId], references: [id])
+
+  @@index([promotionId, createdAt])
+}

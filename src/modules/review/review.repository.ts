@@ -1,0 +1,78 @@
+import { Prisma, Review } from "@prisma/client";
+import { prisma } from "config/prisma";
+
+export class ReviewRepository {
+  async create(data: Prisma.ReviewCreateInput, tx?: Prisma.TransactionClient) {
+    const client = tx ?? prisma;
+
+    return client.review.create({
+      data,
+    });
+  }
+
+  async aggregateByVenue(venueId: string, tx?: Prisma.TransactionClient) {
+    const client = tx ?? prisma;
+
+    return client.review.aggregate({
+      where: {
+        booking: {
+          venueId: venueId,
+        },
+      },
+      _avg: { rating: true },
+      _count: { rating: true },
+    });
+  }
+
+  async findById(id: string): Promise<Review | null> {
+    return prisma.review.findUnique({ where: { id } });
+  }
+
+  async findAll(): Promise<Review[]> {
+    return prisma.review.findMany();
+  }
+
+  async findByBookingId(bookingId: string): Promise<Review | null> {
+    return prisma.review.findUnique({
+      where: { bookingId },
+      include: {
+        booking: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                photo: true,
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  async findManyByVenueId(venueId: string): Promise<Review[]> {
+    return prisma.review.findMany({
+      where: {
+        booking: {
+          venueId,
+        },
+      },
+      include: {
+        booking: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                photo: true,
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+}

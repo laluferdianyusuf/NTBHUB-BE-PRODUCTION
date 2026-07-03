@@ -1,0 +1,110 @@
+import { CommunityEventType } from "@prisma/client";
+import { prisma } from "config/prisma";
+import { toBool, toNum } from "helpers/parser";
+import { CommunityEventCollaborationRepository } from "modules/community-event/community-event-collab.repository";
+import { CommunityEventRepository } from "modules/community-event/community-event.repository";
+import { uploadImage } from "utils/uploadS3";
+
+export class CommunityEventService {
+  private repo = new CommunityEventRepository();
+  private collabRepo = new CommunityEventCollaborationRepository();
+
+  listByCommunity(communityId: string, page = 1, limit = 20) {
+    const skip = (page - 1) * limit;
+    return this.repo.findByCommunity(communityId, { skip, take: limit });
+  }
+
+  async createEvent(
+    communityId: string,
+    createdById: string,
+    data: {
+      title: string;
+      description?: string;
+      startAt: Date;
+      endAt?: Date;
+      type?: CommunityEventType;
+      location?: string;
+      latitude?: number;
+      longitude?: number;
+      meetingLink?: string;
+      collaborations?: string[];
+      includeTicket?: boolean;
+    },
+    file: Express.Multer.File,
+  ) {
+    return prisma.$transaction(async (tx) => {
+      let imageUrl: string | null = null;
+
+      if (file) {
+        const image = await uploadImage({ file, folder: "community-events" });
+        imageUrl = image.url;
+      }
+
+      const event = await this.repo.create(
+        {
+          title: data.title,
+          description: data.description,
+          startAt: data.startAt,
+          endAt: data.endAt,
+          type: data.type,
+          location: data.location,
+          latitude: toNum(data.latitude),
+          longitude: toNum(data.longitude),
+          image: imageUrl,
+          includeTicket: toBool(data.includeTicket),
+          community: { connect: { id: communityId } },
+          createdBy: { connect: { id: createdById } },
+        },
+        tx,
+      );
+
+      if (data.collaborations?.length) {
+        await this.collabRepo.bulkAdd(event.id, data.collaborations, tx);
+      }
+
+      return event;
+    });
+  }
+
+  async getCommunityEventDashboard(eventId: string) {
+    const dashboard = await this.repo.getCommunityEventDashboard(eventId);
+
+    return {
+      message: "Community event dashboard fetched successfully",
+
+      summary: {
+        totalPending: dashboard.summary.pending,
+        totalPaid: dashboard.summary.paid,
+        totalCancelled: dashboard.summary.cancelled,
+        totalExpired: dashboard.summary.expired,
+      },
+
+      finance: {
+        revenueToday: dashboard.revenueToday,
+      },
+
+      orders: {
+        pending: dashboard.pending,
+        paid: dashboard.paid,
+      },
+    };
+  }
+
+  async addCollaboration(eventId: string, communityId: string) {
+    return this.collabRepo.add(eventId, communityId);
+  }
+
+  updateEvent(id: string, data: any) {
+    return this.repo.update(id, data);
+  }
+
+  getEventDetail(id: string) {
+    const event = this.repo.findById(id);
+
+    return event;
+  }
+
+  deleteEvent(id: string) {
+    return this.repo.delete(id);
+  }
+}

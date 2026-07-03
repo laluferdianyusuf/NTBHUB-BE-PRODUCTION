@@ -1,0 +1,232 @@
+import { Menu, Prisma } from "@prisma/client";
+
+import { prisma } from "config/prisma";
+
+export class MenuRepository {
+  private transaction(tx?: Prisma.TransactionClient) {
+    return tx ?? prisma;
+  }
+  // find all menus
+  async findAllMenus(): Promise<Menu[]> {
+    return prisma.menu.findMany({
+      where: {
+        isDeleted: false,
+      },
+      include: {
+        venue: true,
+      },
+    });
+  }
+
+  // find all menus at venue
+  async findMenuByVenueId(venueId: string): Promise<Menu[]> {
+    return prisma.menu.findMany({
+      where: {
+        venueId,
+        isDeleted: false,
+      },
+    });
+  }
+
+  // find detail menu
+  async findMenuById(
+    id: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<Menu | null> {
+    const client = this.transaction(tx);
+
+    return client.menu.findFirst({
+      where: {
+        id,
+        isDeleted: false,
+      },
+    });
+  }
+
+  async findMenuByIds(
+    ids: string[],
+    tx?: Prisma.TransactionClient,
+  ): Promise<Menu[]> {
+    const client = this.transaction(tx);
+
+    return client.menu.findMany({ where: { id: { in: ids } } });
+  }
+
+  //   create new menu at venue
+  async createNewMenu(
+    data: {
+      name: string;
+      price: number;
+      category: string;
+      venueId: string;
+      image: string;
+    },
+    tx?: Prisma.TransactionClient,
+  ) {
+    const db = tx ?? prisma;
+    return await db.menu.create({
+      data: data,
+    });
+  }
+
+  async toggleMenuStatus(
+    id: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<Menu> {
+    const client = this.transaction(tx);
+
+    const menu = await client.menu.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        isAvailable: true,
+      },
+    });
+
+    if (!menu) {
+      throw new Error("Menu not found");
+    }
+
+    return client.menu.update({
+      where: { id },
+      data: {
+        isAvailable: !menu.isAvailable,
+      },
+    });
+  }
+
+  async createManyMenus(
+    venueId: string,
+    items: Array<{
+      name: string;
+      price: number;
+      category: string;
+      image: string;
+    }>,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const db = tx ?? prisma;
+
+    const data = items.map((item) => ({
+      ...item,
+      venueId,
+    }));
+
+    return await db.menu.createMany({
+      data: data,
+      skipDuplicates: true,
+    });
+  }
+
+  // update menu
+  async updateMenu(id: string, data: Partial<Menu>): Promise<Menu> {
+    return prisma.menu.update({ where: { id: id }, data });
+  }
+
+  // delete menu
+  async deleteMenu(id: string): Promise<Menu> {
+    return prisma.menu.update({
+      where: { id },
+      data: {
+        isDeleted: true,
+      },
+    });
+  }
+
+  async getMostPopularMenus(limit = 10, tx?: Prisma.TransactionClient) {
+    const client = this.transaction(tx);
+
+    const grouped = await client.$queryRaw<
+      {
+        menuId: string;
+        totalSold: number;
+        totalOrders: bigint;
+        revenue: number;
+      }[]
+    >`
+SELECT
+  "menuId",
+  SUM(quantity)::int as "totalSold",
+  COUNT(id)::bigint as "totalOrders",
+  SUM(price)::float as revenue
+FROM "OrderItem"
+GROUP BY "menuId"
+ORDER BY "totalSold" DESC
+LIMIT ${limit}
+`;
+
+    const menus = await client.menu.findMany({
+      where: {
+        id: {
+          in: grouped.map((g) => g.menuId),
+        },
+      },
+      include: {
+        venue: {
+          select: {
+            id: true,
+            name: true,
+            address: true,
+            latitude: true,
+            longitude: true,
+          },
+        },
+      },
+    });
+
+    const menuMap = new Map(menus.map((m) => [m.id, m]));
+
+    return grouped.map((g) => {
+      const menu = menuMap.get(g.menuId);
+
+      return {
+        menuId: g.menuId,
+        menuName: menu?.name,
+        venueName: menu?.venue?.name,
+        totalSold: Number(g.totalSold ?? 0),
+        totalOrders: Number(g.totalOrders ?? 0),
+        revenue: Number(g.revenue ?? 0),
+      };
+    });
+  }
+
+  async getMostPopularMenusByVenue(venueId: string, limit = 5) {
+    const grouped = await prisma.orderItem.groupBy({
+      by: ["menuId"],
+      where: {
+        order: {
+          venueId,
+        },
+      },
+      _sum: {
+        quantity: true,
+      },
+      orderBy: {
+        _sum: {
+          quantity: "desc",
+        },
+      },
+      take: limit,
+    });
+
+    const menus = await prisma.menu.findMany({
+      where: {
+        id: {
+          in: grouped.map((g) => g.menuId),
+        },
+      },
+    });
+
+    const menuMap = new Map(menus.map((m) => [m.id, m]));
+
+    return grouped.map((g) => {
+      const menu = menuMap.get(g.menuId);
+
+      return {
+        menuId: g.menuId,
+        name: menu?.name,
+        totalSold: g._sum.quantity ?? 0,
+      };
+    });
+  }
+}
