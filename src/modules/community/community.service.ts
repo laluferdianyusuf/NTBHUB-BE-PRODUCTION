@@ -1,6 +1,6 @@
 import { Community, CommunityMemberStatus, Prisma } from "@prisma/client";
-import { CommunityRepository } from "modules/community/community.repository";
 import { CommunityMemberRepository } from "modules/community-member/community-member.repository";
+import { CommunityRepository } from "modules/community/community.repository";
 import { uploadImage } from "utils/uploadS3";
 
 interface CommunityWithMembership {
