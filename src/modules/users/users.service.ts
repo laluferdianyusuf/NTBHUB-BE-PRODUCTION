@@ -73,6 +73,8 @@ export class UserService {
 
     let user;
 
+    console.log(pin);
+
     try {
       user = await prisma.$transaction(async (tx) => {
         const newUser = await userRepository.create(
@@ -328,6 +330,7 @@ export class UserService {
     }
 
     const pin = crypto.randomInt(100000, 999999).toString();
+    console.log(pin);
 
     const hashedPin = await bcrypt.hash(pin, 10);
 

@@ -56,6 +56,7 @@ export class AuthController {
 
   static async verifyPinEmail(req: Request, res: Response) {
     const { userId, pin } = req.body;
+
     const result = await runService(() =>
       userService.verifyPinEmail(userId, pin),
     );
@@ -127,9 +128,7 @@ export class AuthController {
     assertSelf(req, req.params.id);
     const { pin } = req.body;
 
-    await runService(() =>
-      userService.verifyPin(req.user!.id, String(pin)),
-    );
+    await runService(() => userService.verifyPin(req.user!.id, String(pin)));
     return sendSuccess(res, null, "Pin verified");
   }
 }

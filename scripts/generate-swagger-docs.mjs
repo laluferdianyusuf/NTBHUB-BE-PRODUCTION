@@ -148,7 +148,15 @@ function parseRoutes(content) {
 function needsAuth(content, routePath) {
   const idx = content.indexOf(`"${routePath}"`);
   if (idx === -1) return false;
-  return content.slice(idx, idx + 500).includes("auth.authenticate");
+
+  const context = content.slice(idx, idx + 500);
+
+  return (
+    context.includes("auth.authenticate") ||
+    context.includes("...venueStaff") ||
+    context.includes("...adminAuth") ||
+    context.includes("...authenticated")
+  );
 }
 
 function humanSummary(method, openApiPath) {
@@ -157,8 +165,17 @@ function humanSummary(method, openApiPath) {
     .split("/")
     .filter((p) => !p.startsWith("{"))
     .slice(-3);
-  const action = { get: "Get", post: "Create", put: "Update", patch: "Update", delete: "Delete" }[method];
-  return `${action} ${parts.join(" ")}`.replace(/-/g, " ").replace(/\s+/g, " ").trim();
+  const action = {
+    get: "Get",
+    post: "Create",
+    put: "Update",
+    patch: "Update",
+    delete: "Delete",
+  }[method];
+  return `${action} ${parts.join(" ")}`
+    .replace(/-/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function operationId(method, openApiPath) {
@@ -204,16 +221,19 @@ for (const [mount, moduleName] of Object.entries(MOUNT_MAP)) {
   const tag = TAG_MAP[mount] ?? "Platform";
 
   for (const { method, path: routePath } of routes) {
-    const openApiPath = `/${mount}${routePath.startsWith("/") ? routePath : `/${routePath}`}`.replace(
-      /:([a-zA-Z]+)/g,
-      "{$1}",
-    );
+    const openApiPath =
+      `/${mount}${routePath.startsWith("/") ? routePath : `/${routePath}`}`.replace(
+        /:([a-zA-Z]+)/g,
+        "{$1}",
+      );
 
     if (!grouped.has(openApiPath)) grouped.set(openApiPath, new Map());
     const methods = grouped.get(openApiPath);
     if (methods.has(method)) continue;
 
-    const pathParams = [...openApiPath.matchAll(/\{([^}]+)\}/g)].map((x) => x[1]);
+    const pathParams = [...openApiPath.matchAll(/\{([^}]+)\}/g)].map(
+      (x) => x[1],
+    );
     const secured = needsAuth(content, routePath);
 
     const opLines = [
