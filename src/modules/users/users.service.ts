@@ -56,6 +56,8 @@ export class UserService {
     role: Role;
     file?: Express.Multer.File;
   }) {
+    console.log(data);
+
     const existing = await userRepository.findByEmail(data.email);
     if (existing) throw new Error("Email already registered");
 
