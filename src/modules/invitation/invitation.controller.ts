@@ -6,6 +6,13 @@ import { InvitationServices } from "./invitation.service";
 const invitationServices = new InvitationServices();
 
 export class InvitationController {
+  static async getPendingInvitations(req: Request, res: Response) {
+    const result = await runService(() =>
+      invitationServices.getPendingInvitations(String(req.user?.id)),
+    );
+    return sendSuccess(res, result, "Pending invitations retrieved");
+  }
+
   static async generateInvitationKey(req: Request, res: Response) {
     const { email, venueId } = req.body;
     const result = await runService(() =>

@@ -3598,6 +3598,8 @@
  *     tags: [Venue]
  *     summary: Get operational operate venue
  *     operationId: getoperational_operate_venue_venueId
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: venueId
@@ -3633,6 +3635,8 @@
  *     tags: [Venue]
  *     summary: Create operational operate create
  *     operationId: postoperational_operate_create_venueId
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: venueId
@@ -3663,6 +3667,8 @@
  *     tags: [Venue]
  *     summary: Update operational operate edit
  *     operationId: patchoperational_operate_edit_venueId
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: venueId
@@ -3691,6 +3697,8 @@
  *     tags: [Venue]
  *     summary: Update operational operate toggle
  *     operationId: patchoperational_operate_toggle_venueId
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: venueId
@@ -3719,6 +3727,8 @@
  *     tags: [Venue]
  *     summary: Update operational operate copy next
  *     operationId: patchoperational_operate_copy_next_venueId
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: venueId
@@ -3747,6 +3757,8 @@
  *     tags: [Venue]
  *     summary: Update operational operate holiday
  *     operationId: patchoperational_operate_holiday_venueId
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: venueId
@@ -3775,6 +3787,8 @@
  *     tags: [Venue]
  *     summary: Update operational operate special
  *     operationId: patchoperational_operate_special_venueId
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: venueId
@@ -8425,6 +8439,38 @@
  *         required: true
  *         schema:
  *           type: string
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Success
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: Not found
+ *       422:
+ *         description: Validation error
+ *
+ * /invitations/pending:
+ *   get:
+ *     tags: [Platform]
+ *     summary: Get invitations pending
+ *     operationId: getinvitations_pending
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
  *       - in: query
  *         name: page
  *         schema:

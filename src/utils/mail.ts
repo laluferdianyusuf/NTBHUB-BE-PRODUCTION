@@ -1,13 +1,13 @@
-import { mailTransporter } from "config/sesClient";
+import { mailTransporter } from "config/mail.config";
 
 export const sendEmail = async (to: string, subject: string, html: string) => {
-  // const mailOptions = {
-  //   from: `"NTB HUB" <${process.env.EMAIL_USER}>`,
-  //   to,
-  //   subject,
-  //   html,
-  // };
-  // await mailTransporter.sendMail(mailOptions);
+  const mailOptions = {
+    from: `"NTB HUB" <${process.env.EMAIL_USER}>`,
+    to,
+    subject,
+    html,
+  };
+  await mailTransporter.sendMail(mailOptions);
 
   // const command = new SendEmailCommand({
   //   Source: `"NTB HUB" <${process.env.SES_FROM_EMAIL}>`,
@@ -29,10 +29,10 @@ export const sendEmail = async (to: string, subject: string, html: string) => {
   // });
   // await ses.send(command);
 
-  return await mailTransporter.sendMail({
-    from: `"NTB HUB" <${process.env.SES_FROM_EMAIL}>`,
-    to,
-    subject,
-    html,
-  });
+  // return await mailTransporter.sendMail({
+  //   from: `"NTB HUB" <${process.env.SES_FROM_EMAIL}>`,
+  //   to,
+  //   subject,
+  //   html,
+  // });
 };

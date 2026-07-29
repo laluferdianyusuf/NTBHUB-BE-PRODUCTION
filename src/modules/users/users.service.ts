@@ -8,7 +8,7 @@ import jwt from "jsonwebtoken";
 import { sendEmail } from "utils/mail";
 import { uploadImage } from "utils/uploadS3";
 import { BookingRepository } from "modules/booking/booking.repository";
-import { InvitationKeyRepository } from "modules/invitation/invitation.repository";
+import { InvitationServices } from "modules/invitation/invitation.service";
 import { PointsRepository } from "modules/points/points.repository";
 import { UserBalanceRepository } from "modules/user-balance/user-balance.repository";
 import { UserRoleRepository } from "modules/user-role/user-role.repository";
@@ -26,7 +26,7 @@ const pointRepository = new PointsRepository();
 const bookingRepository = new BookingRepository();
 const userBalanceRepository = new UserBalanceRepository();
 const userRoleRepository = new UserRoleRepository();
-const invitationKeyRepository = new InvitationKeyRepository();
+const invitationServices = new InvitationServices();
 const venueRepository = new VenueRepository();
 const accountService = new AccountService();
 const rateLimiter = new RateLimiterService();
@@ -515,9 +515,7 @@ export class UserService {
     }
 
     const roles = await userRoleRepository.findByUserId(userId);
-    const invitations = await invitationKeyRepository.findActiveByEmail(
-      user.email,
-    );
+    const invitations = await invitationServices.getPendingInvitations(userId);
 
     const globalRoles = roles
       .filter((r) => !r.venueId && !r.eventId && r.isActive)
@@ -541,30 +539,6 @@ export class UserService {
         name: r.event?.name!,
         image: r.event?.image!,
         role: r.role,
-      }));
-
-    const pendingVenueInvitations = invitations
-      .filter((inv) => inv.venueId)
-      .map((inv) => ({
-        venueId: inv.venueId!,
-        key: inv.key,
-        expiresAt: inv.expiresAt,
-      }));
-
-    const pendingEventInvitations = invitations
-      .filter((inv) => inv.eventId)
-      .map((inv) => ({
-        eventId: inv.eventId!,
-        key: inv.key,
-        expiresAt: inv.expiresAt,
-      }));
-
-    const pendingCommunityInvitations = invitations
-      .filter((inv) => inv.communityId)
-      .map((inv) => ({
-        communityId: inv.communityId!,
-        key: inv.key,
-        expiresAt: inv.expiresAt,
       }));
 
     await redis.set(
@@ -595,11 +569,7 @@ export class UserService {
         events: eventRoles,
       },
 
-      invitations: {
-        venues: pendingVenueInvitations,
-        events: pendingEventInvitations,
-        community: pendingCommunityInvitations,
-      },
+      invitations,
     };
   }
 

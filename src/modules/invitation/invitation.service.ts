@@ -9,8 +9,10 @@ import { UserRoleRepository } from "modules/user-role/user-role.repository";
 import { VenueRepository } from "modules/venue/venue.repository";
 import { sendEmail } from "utils/mail";
 import { AccountService } from "modules/account/account.service";
+import { UserRepository } from "modules/users/users.repository";
 
 const invitationKeyRepository = new InvitationKeyRepository();
+const userRepository = new UserRepository();
 const userRoleRepository = new UserRoleRepository();
 const communityRepository = new CommunityRepository();
 const communityMemberRepository = new CommunityMemberRepository();
@@ -172,17 +174,107 @@ const emailTemplate = ({
 </html>
 `;
 
+type PendingInvitation = Awaited<
+  ReturnType<InvitationKeyRepository["findActiveByEmail"]>
+>[number];
+
 export class InvitationServices {
+  private dedupeLatest(
+    invitations: PendingInvitation[],
+    getEntityId: (inv: PendingInvitation) => string | null | undefined,
+  ) {
+    const latestByEntity = new Map<string, PendingInvitation>();
+
+    for (const inv of invitations) {
+      const entityId = getEntityId(inv);
+      if (!entityId) continue;
+
+      const existing = latestByEntity.get(entityId);
+      if (!existing) {
+        latestByEntity.set(entityId, inv);
+        continue;
+      }
+
+      const existingExpiry = existing.expiresAt?.getTime() ?? 0;
+      const currentExpiry = inv.expiresAt?.getTime() ?? 0;
+      if (currentExpiry >= existingExpiry) {
+        latestByEntity.set(entityId, inv);
+      }
+    }
+
+    return Array.from(latestByEntity.values());
+  }
+
+  private mapPendingInvitations(invitations: PendingInvitation[]) {
+    const venueInvitations = this.dedupeLatest(
+      invitations.filter((inv) => inv.venueId),
+      (inv) => inv.venueId,
+    );
+    const eventInvitations = this.dedupeLatest(
+      invitations.filter((inv) => inv.eventId),
+      (inv) => inv.eventId,
+    );
+    const communityInvitations = this.dedupeLatest(
+      invitations.filter((inv) => inv.communityId),
+      (inv) => inv.communityId,
+    );
+
+    return {
+      venues: venueInvitations.map((inv) => ({
+        venueId: inv.venueId!,
+        name: inv.venue?.name ?? null,
+        image: inv.venue?.image ?? null,
+        role: inv.role,
+        key: inv.key,
+        expiresAt: inv.expiresAt,
+      })),
+      events: eventInvitations.map((inv) => ({
+        eventId: inv.eventId!,
+        name: inv.event?.name ?? null,
+        image: inv.event?.image ?? null,
+        role: inv.role,
+        key: inv.key,
+        expiresAt: inv.expiresAt,
+      })),
+      community: communityInvitations.map((inv) => ({
+        communityId: inv.communityId!,
+        name: inv.community?.name ?? null,
+        image: inv.community?.image ?? null,
+        role: inv.role,
+        key: inv.key,
+        expiresAt: inv.expiresAt,
+      })),
+    };
+  }
+
+  async getPendingInvitations(userId: string) {
+    const user = await userRepository.findById(userId);
+    if (!user) throw new Error("User not found");
+
+    const invitations = await invitationKeyRepository.findActiveByEmail(
+      user.email,
+    );
+
+    return this.mapPendingInvitations(invitations);
+  }
+
   async generateInvitationKey(email: string, venueId: string) {
     const key = `VEN-${randomUUID().slice(0, 8).toUpperCase()}`;
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-    const result = await invitationKeyRepository.generateVenue({
-      email,
-      key,
-      role: Role.VENUE_OWNER,
-      venueId,
-      expiresAt,
+    const result = await prisma.$transaction(async (tx) => {
+      await invitationKeyRepository.revokeActiveByTarget({ email, venueId }, tx);
+
+      return invitationKeyRepository.generateVenue(
+        {
+          email,
+          key,
+          role: Role.VENUE_OWNER,
+          venueId,
+          expiresAt,
+        },
+        tx,
+      );
     });
 
     await sendEmail(
@@ -202,12 +294,19 @@ export class InvitationServices {
     const key = `EVT-${randomUUID().slice(0, 8).toUpperCase()}`;
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-    const invitation = await invitationKeyRepository.generateEvent({
-      email,
-      key,
-      role: Role.EVENT_OWNER,
-      eventId,
-      expiresAt,
+    const invitation = await prisma.$transaction(async (tx) => {
+      await invitationKeyRepository.revokeActiveByTarget({ email, eventId }, tx);
+
+      return invitationKeyRepository.generateEvent(
+        {
+          email,
+          key,
+          role: Role.EVENT_OWNER,
+          eventId,
+          expiresAt,
+        },
+        tx,
+      );
     });
 
     await sendEmail(
@@ -227,12 +326,22 @@ export class InvitationServices {
     const key = `COMM-${randomUUID().slice(0, 8).toUpperCase()}`;
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 jam
 
-    const invitation = await invitationKeyRepository.generateCommunity({
-      email,
-      key,
-      role: Role.COMMUNITY_OWNER,
-      communityId,
-      expiresAt,
+    const invitation = await prisma.$transaction(async (tx) => {
+      await invitationKeyRepository.revokeActiveByTarget(
+        { email, communityId },
+        tx,
+      );
+
+      return invitationKeyRepository.generateCommunity(
+        {
+          email,
+          key,
+          role: Role.COMMUNITY_OWNER,
+          communityId,
+          expiresAt,
+        },
+        tx,
+      );
     });
 
     await sendEmail(

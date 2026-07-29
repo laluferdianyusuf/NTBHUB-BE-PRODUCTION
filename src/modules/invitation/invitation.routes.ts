@@ -6,6 +6,12 @@ import { auth } from "shared/middleware/auth";
 
 const router = Router();
 
+router.get(
+  "/pending",
+  auth.authenticate,
+  asyncHandler(InvitationController.getPendingInvitations),
+);
+
 router.post("/venue/create-invitation", auth.authenticate, asyncHandler(InvitationController.generateInvitationKey),
 );
 

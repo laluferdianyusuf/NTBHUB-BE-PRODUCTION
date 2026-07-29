@@ -99,12 +99,51 @@ export class InvitationKeyRepository {
   async findActiveByEmail(email: string, tx?: Prisma.TransactionClient) {
     const db = tx ?? prisma;
 
-    return db.invitationKey.findMany({
+    const result = await db.invitationKey.findMany({
       where: {
         email,
         usedAt: null,
         OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
       },
+      include: {
+        venue: { select: { id: true, name: true, image: true } },
+        event: { select: { id: true, name: true, image: true } },
+        community: { select: { id: true, name: true, image: true } },
+      },
+    });
+
+    return result;
+  }
+
+  async revokeActiveByTarget(
+    params: {
+      email: string;
+      venueId?: string;
+      eventId?: string;
+      communityId?: string;
+    },
+    tx?: Prisma.TransactionClient,
+  ) {
+    const db = this.db(tx);
+    const now = new Date();
+
+    const where: Prisma.InvitationKeyWhereInput = {
+      email: params.email,
+      usedAt: null,
+      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+    };
+
+    if (params.venueId) {
+      where.venueId = params.venueId;
+    } else if (params.eventId) {
+      where.eventId = params.eventId;
+    } else if (params.communityId) {
+      where.communityId = params.communityId;
+    }
+
+    return db.invitationKey.updateMany({
+      where,
+      data: { expiresAt: now },
     });
   }
 
