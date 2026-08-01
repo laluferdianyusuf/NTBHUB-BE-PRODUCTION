@@ -1,5 +1,8 @@
 import { prisma } from "config/prisma";
-import { redis } from "config/redis.config";
+import {
+  publishDeliveryEvent,
+  publishDeliveryLocation,
+} from "helpers/deliveryEvents";
 
 export class CourierTrackingService {
   async updateLocation(courierId: string, latitude: number, longitude: number) {
@@ -24,17 +27,22 @@ export class CourierTrackingService {
           in: ["ASSIGNED", "PICKED_UP", "ON_THE_WAY"],
         },
       },
+      include: {
+        courier: { select: { userId: true } },
+      },
     });
 
     if (delivery) {
-      await redis.publish(
-        `delivery:${delivery.id}`,
-        JSON.stringify({
-          courierId,
-          latitude,
-          longitude,
-        }),
-      );
+      publishDeliveryLocation({
+        deliveryId: delivery.id,
+        orderId: delivery.orderId,
+        userId: delivery.userId,
+        courierId,
+        courierUserId: delivery.courier?.userId,
+        status: delivery.status as any,
+        latitude,
+        longitude,
+      });
     }
 
     return location;

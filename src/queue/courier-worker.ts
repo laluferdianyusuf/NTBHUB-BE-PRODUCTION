@@ -1,74 +1,45 @@
-import { Job, Queue, QueueEvents, Worker } from "bullmq";
+import { Job, Worker } from "bullmq";
 import { redis } from "config/redis.config";
 import { CourierService } from "modules/courier/courier.service";
-
-let courierService: CourierService;
-
-function getCourierServices() {
-  if (!courierService) courierService = new CourierService();
-  return courierService;
-}
+import { dispatchAssignDelivery } from "./dispatch";
 
 const ASSIGN_QUEUE = "assign-delivery";
 const TIMEOUT_QUEUE = "assignment-timeout";
 
-export const assignQueue = new Queue(ASSIGN_QUEUE, {
-  connection: redis,
-});
+let courierService: CourierService;
 
-export const timeoutQueue = new Queue(TIMEOUT_QUEUE, {
-  connection: redis,
-});
-
-const assignQueueEvents = new QueueEvents(ASSIGN_QUEUE, {
-  connection: redis,
-});
-
-assignQueueEvents.on("completed", ({ jobId }) => {
-  console.log(`[ASSIGN COMPLETED] Job ${jobId}`);
-});
-
-assignQueueEvents.on("failed", ({ jobId, failedReason }) => {
-  console.log(`[ASSIGN FAILED] Job ${jobId}: ${failedReason}`);
-});
-
-const courierServices = getCourierServices();
+function getCourierService() {
+  if (!courierService) courierService = new CourierService();
+  return courierService;
+}
 
 export const assignWorker = new Worker(
   ASSIGN_QUEUE,
-  async (job: Job) => {
+  async (job: Job<{ deliveryId: string }>) => {
     const { deliveryId } = job.data;
 
     console.log(`[ASSIGN] Processing delivery ${deliveryId}`);
 
-    try {
-      const result = await courierServices.assignDelivery(deliveryId);
+    const service = getCourierService();
+    const result = await service.assignDelivery(deliveryId);
 
-      if (result.success) {
-        console.log(
-          `[ASSIGN SUCCESS] Delivery ${deliveryId} -> Courier ${result.courierId}`,
-        );
-
-        await timeoutQueue.add(
-          "assignment-timeout",
-          { deliveryId },
-          {
-            delay: 30000,
-            attempts: 3,
-            backoff: {
-              type: "exponential",
-              delay: 5000,
-            },
-          },
-        );
-
-        return result;
-      }
-    } catch (error: any) {
-      console.error(`[ASSIGN ERROR] ${deliveryId}`, error.message);
-
-      throw error;
+    if ("skipped" in result && result.skipped) {
+      console.log(`[ASSIGN] Skipped delivery ${deliveryId}`);
+      return result;
     }
+
+    if ("failed" in result && result.failed) {
+      console.log(`[ASSIGN] Failed delivery ${deliveryId}: ${result.reason}`);
+      return result;
+    }
+
+    if ("success" in result && result.success) {
+      console.log(
+        `[ASSIGN SUCCESS] Delivery ${deliveryId} -> Courier ${result.courierId}`,
+      );
+    }
+
+    return result;
   },
   {
     connection: redis,
@@ -78,39 +49,33 @@ export const assignWorker = new Worker(
 
 export const timeoutWorker = new Worker(
   TIMEOUT_QUEUE,
-  async (job: Job) => {
+  async (job: Job<{ deliveryId: string }>) => {
     const { deliveryId } = job.data;
 
     console.log(`[TIMEOUT CHECK] Delivery ${deliveryId}`);
 
-    try {
-      const result = await courierServices.handleAssignmentTimeout(deliveryId);
+    const service = getCourierService();
+    const result = await service.handleAssignmentTimeout(deliveryId);
 
-      if (result?.reassign) {
-        console.log(`[REASSIGN] Delivery ${deliveryId}`);
-
-        await timeoutQueue.add(
-          "assign-delivery",
-          { deliveryId },
-          {
-            attempts: 3,
-            backoff: {
-              type: "exponential",
-              delay: 3000,
-            },
-          },
-        );
-
-        return result;
-      }
-    } catch (error: any) {
-      console.error(`[TIMEOUT ERROR] ${deliveryId}`, error.message);
-
-      throw error;
+    if (result?.reassign) {
+      console.log(`[REASSIGN] Delivery ${deliveryId}`);
+      await dispatchAssignDelivery(deliveryId);
     }
+
+    return result;
   },
   {
     connection: redis,
     concurrency: 5,
   },
 );
+
+assignWorker.on("failed", (job, err) => {
+  console.error(`[ASSIGN FAILED] Job ${job?.id}:`, err.message);
+});
+
+timeoutWorker.on("failed", (job, err) => {
+  console.error(`[TIMEOUT FAILED] Job ${job?.id}:`, err.message);
+});
+
+console.log("[COURIER WORKER] Assign + timeout workers started");

@@ -1,5 +1,6 @@
 import { CommunityEventOrder, EventOrderStatus, Prisma } from "@prisma/client";
 import { prisma } from "config/prisma";
+import { publishPaymentEvent } from "helpers/paymentEvents";
 import { generateTicketQR } from "helpers/qrCodeHelper";
 
 import jwt from "jsonwebtoken";
@@ -198,7 +199,9 @@ export class CommunityEventOrderService {
 
     const order = await this.orderRepo.findById(orderId, tx);
     if (!order) throw new Error("Order not found");
-    if (order.status === "PAID") return order;
+    if (order.status === "PAID") {
+      throw new Error("Order already paid");
+    }
 
     if (order.status !== "PENDING") {
       throw new Error("Invalid order status");
@@ -297,7 +300,7 @@ export class CommunityEventOrderService {
       tx,
     );
 
-    await this.paymentRepo.create(
+    const payment = await this.paymentRepo.create(
       {
         invoiceId: invoice.id,
         amount: Number(invoice.amount),
@@ -325,7 +328,10 @@ export class CommunityEventOrderService {
     await this.invoiceRepo.markPaid(invoice.id, tx);
     await this.orderRepo.updateStatus(order.id, "PAID", tx);
 
-    return order;
+    const newBalance =
+      (await this.userBalanceRepo.getBalanceByUserId(order.userId, tx)) ?? 0;
+
+    return { order, payment, invoice, newBalance };
   }
 
   async checkoutAndPay(
@@ -337,15 +343,34 @@ export class CommunityEventOrderService {
   ) {
     await this.userService.verifyPin(userId, pin);
 
-    return prisma.$transaction(async (tx) => {
+    const paymentResult = await prisma.$transaction(async (tx) => {
       const order = await this.createOrder(selectedUserId, eventId, items, tx);
 
-      await this.handlePaymentSuccess(userId, order.id, tx);
+      const result = await this.handlePaymentSuccess(userId, order.id, tx);
 
       await this.generateTickets(order, items, tx);
 
-      return order;
+      return result;
     });
+
+    publishPaymentEvent({
+      userId,
+      paymentId: paymentResult.payment.id,
+      invoiceId: paymentResult.invoice.id,
+      entityType: "COMMUNITY_EVENT_ORDER",
+      entityId: paymentResult.order.id,
+      status: "SUCCESS",
+      amount: Number(paymentResult.invoice.amount),
+      newBalance: paymentResult.newBalance,
+      method: "WALLET",
+      provider: "NTB_HUB",
+    });
+
+    return {
+      ...paymentResult.order,
+      paymentId: paymentResult.payment.id,
+      newBalance: paymentResult.newBalance,
+    };
   }
 
   async scanQrCode(qrCode: string) {

@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { generateTicketQR } from "helpers/qrCodeHelper";
 import jwt from "jsonwebtoken";
 import { prisma } from "config/prisma";
+import { publishPaymentEvent } from "helpers/paymentEvents";
 import { AccountRepository } from "modules/account/account.repository";
 import { ActivityLogRepository } from "modules/log/log.repository";
 import { EventAttendanceRepository } from "modules/event-attendance/event-attendance.repository";
@@ -127,7 +128,9 @@ export class EventOrderService {
     const order = await this.eventOrderRepo.findById(orderId, tx);
     if (!order) throw new Error("Order not found");
 
-    if (order.status === "PAID") return order;
+    if (order.status === "PAID") {
+      throw new Error("Order already paid");
+    }
     if (order.status !== "PENDING") {
       throw new Error("Invalid order status");
     }
@@ -218,7 +221,7 @@ export class EventOrderService {
       tx,
     );
 
-    await this.paymentRepo.create(
+    const payment = await this.paymentRepo.create(
       {
         invoiceId: invoice.id,
         amount: Number(order.total),
@@ -250,7 +253,10 @@ export class EventOrderService {
       "PAID",
     );
 
-    return order;
+    const newBalance =
+      (await this.userBalanceRepo.getBalanceByUserId(userId, tx)) ?? 0;
+
+    return { order, payment, invoice, newBalance };
   }
 
   async checkoutAndPay(
@@ -262,15 +268,34 @@ export class EventOrderService {
   ) {
     await this.userService.verifyPin(userId, pin);
 
-    return prisma.$transaction(async (tx) => {
+    const paymentResult = await prisma.$transaction(async (tx) => {
       const order = await this.checkout(selectedUserId, eventId, items, tx);
 
-      await this.markPaid(userId, order.id, tx);
+      const result = await this.markPaid(userId, order.id, tx);
 
       await this.generateTickets(order, items, tx);
 
-      return order;
+      return result;
     });
+
+    publishPaymentEvent({
+      userId,
+      paymentId: paymentResult.payment.id,
+      invoiceId: paymentResult.invoice.id,
+      entityType: "EVENT_ORDER",
+      entityId: paymentResult.order.id,
+      status: "SUCCESS",
+      amount: Number(paymentResult.invoice.amount),
+      newBalance: paymentResult.newBalance,
+      method: "WALLET",
+      provider: "NTB_HUB",
+    });
+
+    return {
+      ...paymentResult.order,
+      paymentId: paymentResult.payment.id,
+      newBalance: paymentResult.newBalance,
+    };
   }
 
   private async generateTickets(

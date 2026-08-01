@@ -17,6 +17,7 @@ export const setupRedisSubscriber = async (io: Server) => {
     "invoice-events",
     "community-events",
     "comment-events",
+    "delivery-events",
   ];
 
   await subscriber.subscribe(...channels);
@@ -29,10 +30,14 @@ export const setupRedisSubscriber = async (io: Server) => {
 
       const payload = data.payload;
 
-      if (payload?.userId) {
-        io.to(`user:${payload.userId}`).emit(data.event, {
-          payload,
-        });
+      const targetUserIds = new Set<string>();
+      if (payload?.userId) targetUserIds.add(payload.userId);
+      if (payload?.courierUserId) targetUserIds.add(payload.courierUserId);
+
+      if (targetUserIds.size > 0) {
+        for (const userId of targetUserIds) {
+          io.to(`user:${userId}`).emit(data.event, { payload });
+        }
       } else {
         io.emit(data.event, { payload });
       }

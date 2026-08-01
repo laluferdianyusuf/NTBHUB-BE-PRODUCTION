@@ -3,6 +3,7 @@ import { ForbiddenError } from "shared/errors";
 import { runService } from "shared/http/serviceError";
 import { sendSuccess } from "shared/http/response";
 import { UserRoleRepository } from "modules/user-role/user-role.repository";
+import { subscribePaymentStream } from "services/sse.service";
 import { PaymentServices } from "./payment.service";
 
 const paymentServices = new PaymentServices();
@@ -52,5 +53,27 @@ export class PaymentController {
       paymentServices.findAllPaymentsByUserId(requestedUserId, cursor, limit),
     );
     return sendSuccess(res, result, "Transaction retrieved");
+  }
+
+  static async getPaymentStatus(req: Request, res: Response) {
+    const userId = req.user!.id;
+    const { paymentId } = req.params;
+
+    const result = await runService(() =>
+      paymentServices.getPaymentStatus(paymentId, userId),
+    );
+
+    return sendSuccess(res, result, "Payment status retrieved");
+  }
+
+  static async streamPaymentStatus(req: Request, res: Response) {
+    const userId = req.user!.id;
+    const { paymentId } = req.params;
+
+    await runService(() =>
+      paymentServices.verifyPaymentStreamAccess(paymentId, userId),
+    );
+
+    await subscribePaymentStream(paymentId, res);
   }
 }

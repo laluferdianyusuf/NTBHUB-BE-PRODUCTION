@@ -1,48 +1,45 @@
-import { Prisma } from "@prisma/client";
 import { midtrans } from "config/midtrans.config";
 import { prisma } from "config/prisma";
 import crypto from "crypto";
 import { enqueuePaymentWebhook } from "queue/paymentQueue";
 import { enqueueTransactionExpiry } from "queue/transactionQueue";
-import { AccountRepository } from "modules/account/account.repository";
+import { ForbiddenError, NotFoundError } from "shared/errors";
 import { InvoiceRepository } from "modules/invoice/invoice.repository";
-import { LedgerRepository } from "modules/ledger/ledger.repository";
 import { PaymentRepository } from "modules/payment/payment.repository";
 import { UserRepository } from "modules/users/users.repository";
+import { BookingRepository } from "modules/booking/booking.repository";
+import { OrderRepository } from "modules/order/order.repository";
 
 const userRepository = new UserRepository();
 const paymentRepository = new PaymentRepository();
 const invoiceRepository = new InvoiceRepository();
-const ledgerRepository = new LedgerRepository();
-const accountRepository = new AccountRepository();
+const bookingRepository = new BookingRepository();
+const orderRepository = new OrderRepository();
 
 export class PaymentServices {
-  private async createTopupLedger(
+  private async verifyPaymentOwnership(
+    payment: NonNullable<Awaited<ReturnType<PaymentRepository["findById"]>>>,
     userId: string,
-    amount: number,
-    invoiceId: string,
-    tx: Prisma.TransactionClient,
   ) {
-    const userAccount = await accountRepository.findUserAccount(userId);
+    const { invoice } = payment;
 
-    const platformAccount = await accountRepository.findPlatformAccount();
+    switch (invoice.entityType) {
+      case "TOPUP":
+        return invoice.entityId === userId;
 
-    if (!userAccount || !platformAccount) {
-      throw new Error("Account not found");
+      case "BOOKING": {
+        const booking = await bookingRepository.findBookingById(invoice.entityId);
+        return booking?.userId === userId;
+      }
+
+      case "ORDER": {
+        const order = await orderRepository.findById(invoice.entityId);
+        return order?.userId === userId;
+      }
+
+      default:
+        return false;
     }
-
-    await ledgerRepository.createMany(
-      [
-        {
-          accountId: userAccount.id,
-          type: "CREDIT",
-          amount,
-          referenceType: "TOPUP",
-          referenceId: invoiceId,
-        },
-      ],
-      tx,
-    );
   }
 
   async TopUp(data: { userId: string; amount: number; bankCode: string }) {
@@ -116,7 +113,8 @@ export class PaymentServices {
       await enqueueTransactionExpiry(payment.id, payment.expiredAt as Date);
 
       return {
-        id: invoice.id,
+        paymentId: payment.id,
+        invoiceId: invoice.id,
         amount: data.amount,
         grossAmount,
         vaNumber: vaNumber,
@@ -163,7 +161,7 @@ export class PaymentServices {
         null;
 
       if (!qrUrl) {
-        throw new Error("Failed to generate VA");
+        throw new Error("Failed to generate QRIS");
       }
 
       const invoice = await invoiceRepository.create(
@@ -193,7 +191,8 @@ export class PaymentServices {
       await enqueueTransactionExpiry(payment.id, payment.expiredAt as Date);
 
       return {
-        id: invoice.id,
+        paymentId: payment.id,
+        invoiceId: invoice.id,
         amount: data.amount,
         grossAmount,
         qrisUrl: qrUrl,
@@ -220,6 +219,38 @@ export class PaymentServices {
     return {
       message: "Webhook received",
     };
+  }
+
+  async getPaymentStatus(paymentId: string, userId: string) {
+    const payment = await paymentRepository.findById(paymentId);
+    if (!payment) throw new NotFoundError("Payment not found");
+
+    const owned = await this.verifyPaymentOwnership(payment, userId);
+    if (!owned) throw new ForbiddenError();
+
+    return {
+      paymentId: payment.id,
+      invoiceId: payment.invoiceId,
+      status: payment.status,
+      amount: Number(payment.amount),
+      method: payment.method,
+      provider: payment.provider,
+      entityType: payment.invoice.entityType,
+      entityId: payment.invoice.entityId,
+      expiredAt: payment.expiredAt,
+      vaNumber: payment.vaNumber,
+      qrisUrl: payment.qrisUrl,
+    };
+  }
+
+  async verifyPaymentStreamAccess(paymentId: string, userId: string) {
+    const payment = await paymentRepository.findById(paymentId);
+    if (!payment) throw new NotFoundError("Payment not found");
+
+    const owned = await this.verifyPaymentOwnership(payment, userId);
+    if (!owned) throw new ForbiddenError();
+
+    return payment;
   }
 
   async findAllPaymentsByUserId(

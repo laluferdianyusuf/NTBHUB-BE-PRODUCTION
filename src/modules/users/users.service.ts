@@ -5,17 +5,17 @@ import crypto from "crypto";
 import { OAuth2Client } from "google-auth-library";
 import Redis from "ioredis";
 import jwt from "jsonwebtoken";
-import { sendEmail } from "utils/mail";
-import { uploadImage } from "utils/uploadS3";
+import { AccountService } from "modules/account/account.service";
 import { BookingRepository } from "modules/booking/booking.repository";
 import { InvitationServices } from "modules/invitation/invitation.service";
 import { PointsRepository } from "modules/points/points.repository";
+import { RateLimiterService } from "modules/rate-limiter-service/rate-limiter-service.service";
 import { UserBalanceRepository } from "modules/user-balance/user-balance.repository";
 import { UserRoleRepository } from "modules/user-role/user-role.repository";
 import { VenueRepository } from "modules/venue/venue.repository";
+import { sendEmail } from "utils/mail";
+import { uploadImage } from "utils/uploadS3";
 import { UserRepository } from "./users.repository";
-import { AccountService } from "modules/account/account.service";
-import { RateLimiterService } from "modules/rate-limiter-service/rate-limiter-service.service";
 
 import { prisma } from "config/prisma";
 const redis = new Redis();
@@ -558,6 +558,8 @@ export class UserService {
       name: user.name,
       username: user.username,
       email: user.email,
+      phone: user.phone,
+      address: user.address,
       avatar: user.photo,
       isVerified: user.isVerified,
       biometricEnabled: user.biometricEnabled,

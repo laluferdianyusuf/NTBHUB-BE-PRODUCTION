@@ -3,52 +3,160 @@
  * /payment/topUp:
  *   post:
  *     tags: [Finance]
- *     summary: Top up balance via bank transfer
+ *     summary: Top up saldo via Virtual Account
+ *     description: |
+ *       Membuat pembayaran Midtrans VA. Response berisi `paymentId` untuk SSE/polling.
+ *
+ *       **Realtime update (pilih salah satu):**
+ *       - SSE: `GET /payment/{paymentId}/stream`
+ *       - Socket.IO: listen `payment:completed` di room user
+ *       - Polling: `GET /payment/{paymentId}/status` setiap 5 detik
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required: [amount, bankCode]
- *             properties:
- *               amount: { type: number, minimum: 10000, example: 50000 }
- *               bankCode: { type: string, example: bca }
+ *             $ref: '#/components/schemas/TopUpRequest'
+ *           example:
+ *             amount: 100000
+ *             bankCode: bca
  *     responses:
  *       201:
- *         $ref: '#/components/responses/Created'
+ *         description: VA generated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/ApiSuccessResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       $ref: '#/components/schemas/TopUpResponse'
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *
  * /payment/topUpQris:
  *   post:
  *     tags: [Finance]
- *     summary: Top up balance via QRIS
+ *     summary: Top up saldo via QRIS
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required: [amount]
- *             properties:
- *               amount: { type: number, minimum: 10000 }
+ *             $ref: '#/components/schemas/TopUpQrisRequest'
+ *           example:
+ *             amount: 50000
  *     responses:
  *       201:
- *         $ref: '#/components/responses/Created'
+ *         description: QRIS URL generated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/ApiSuccessResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       $ref: '#/components/schemas/TopUpResponse'
+ *
+ * /payment/{paymentId}/status:
+ *   get:
+ *     tags: [Finance]
+ *     summary: Cek status pembayaran (polling fallback)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - $ref: '#/components/parameters/PaymentIdPath'
+ *     responses:
+ *       200:
+ *         description: Status pembayaran saat ini
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/ApiSuccessResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       $ref: '#/components/schemas/PaymentStatusResponse'
+ *             example:
+ *               status: true
+ *               status_code: 200
+ *               message: Payment status retrieved
+ *               data:
+ *                 paymentId: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+ *                 status: SUCCESS
+ *                 amount: 100000
+ *                 method: VA
+ *                 provider: MIDTRANS
+ *                 entityType: TOPUP
+ *       403:
+ *         $ref: '#/components/responses/Forbidden'
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ *
+ * /payment/{paymentId}/stream:
+ *   get:
+ *     tags: [Finance]
+ *     summary: Stream status pembayaran (SSE)
+ *     description: |
+ *       Server-Sent Events untuk screen menunggu pembayaran top-up.
+ *       Connection ditutup otomatis setelah `payment:completed`, `payment:failed`, atau `payment:expired`.
+ *
+ *       **Events:**
+ *       - `connected` — koneksi aktif
+ *       - `payment:completed` — pembayaran sukses
+ *       - `payment:failed` — pembayaran gagal
+ *       - `payment:expired` — VA/QRIS expired
+ *
+ *       **Contoh payload `payment:completed`:**
+ *       ```json
+ *       {
+ *         "userId": "uuid",
+ *         "paymentId": "uuid",
+ *         "status": "SUCCESS",
+ *         "amount": 100000,
+ *         "newBalance": 250000,
+ *         "method": "VA",
+ *         "provider": "MIDTRANS"
+ *       }
+ *       ```
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - $ref: '#/components/parameters/PaymentIdPath'
+ *     responses:
+ *       200:
+ *         description: SSE stream
+ *         content:
+ *           text/event-stream:
+ *             schema:
+ *               type: string
+ *             example: |
+ *               event: connected
+ *               data: {"paymentId":"3fa85f64-5717-4562-b3fc-2c963f66afa6"}
+ *
+ *               event: payment:completed
+ *               data: {"userId":"...","paymentId":"...","status":"SUCCESS","newBalance":250000}
+ *       403:
+ *         $ref: '#/components/responses/Forbidden'
  *
  * /payment/callback:
  *   post:
  *     tags: [Finance]
  *     summary: Midtrans payment webhook
- *     description: Called by Midtrans — do not invoke manually.
+ *     description: Dipanggil oleh Midtrans — jangan invoke manual.
  *     requestBody:
  *       content:
  *         application/json:
  *           schema:
  *             type: object
+ *             properties:
+ *               order_id: { type: string, example: TOPUP-A1B2C3D4 }
+ *               transaction_status: { type: string, example: settlement }
+ *               gross_amount: { type: string, example: "104440.00" }
+ *               signature_key: { type: string }
  *     responses:
  *       200:
  *         description: Callback acknowledged
@@ -56,7 +164,7 @@
  * /payment/lists/{userId}:
  *   get:
  *     tags: [Finance]
- *     summary: Payment history by user
+ *     summary: Riwayat top-up by user
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
@@ -180,10 +288,10 @@
  *             type: object
  *             required: [amount, bankCode, accountNumber, accountName]
  *             properties:
- *               amount: { type: number }
- *               bankCode: { type: string }
- *               accountNumber: { type: string }
- *               accountName: { type: string }
+ *               amount: { type: number, example: 500000 }
+ *               bankCode: { type: string, example: bca }
+ *               accountNumber: { type: string, example: "1234567890" }
+ *               accountName: { type: string, example: "John Doe" }
  *     responses:
  *       201:
  *         $ref: '#/components/responses/Created'

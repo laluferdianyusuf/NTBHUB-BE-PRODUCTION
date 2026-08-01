@@ -111,7 +111,7 @@ const TAG_MAP = {
   news: "Platform",
   invitations: "Platform",
   tasks: "Platform",
-  courier: "Platform",
+  courier: "Courier",
   search: "Platform",
   logs: "Platform",
   presence: "Platform",
@@ -121,6 +121,9 @@ const TAG_MAP = {
   "well-known": "Platform",
   "deep-link": "Platform",
 };
+
+/** Modules documented manually in src/docs/*.docs.ts */
+const SKIP_MODULES = new Set(["courier", "payment", "order", "booking"]);
 
 const ROUTE_RE =
   /router\.(get|post|put|patch|delete)\(\s*["'`]([^"'`]+)["'`]/gi;
@@ -213,6 +216,8 @@ function responseBlock(method) {
 const grouped = new Map();
 
 for (const [mount, moduleName] of Object.entries(MOUNT_MAP)) {
+  if (SKIP_MODULES.has(moduleName)) continue;
+
   const routesFile = findRoutesFile(moduleName);
   if (!routesFile) continue;
 

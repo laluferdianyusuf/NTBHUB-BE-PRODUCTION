@@ -29,6 +29,15 @@ Semua response JSON mengikuti envelope:
 
 ## Base URL
 Semua path di bawah prefix \`/api/v1\`.
+
+## Realtime (Socket.IO)
+Connect ke port Socket (\`SOCKET_PORT\`, default 3101) dengan JWT di \`auth.token\`.
+
+**Payment events:** \`payment:completed\`, \`payment:failed\`, \`balance:updated\`
+
+**Delivery events:** \`delivery:assigned\`, \`delivery:location\`, \`delivery:picked_up\`, \`delivery:delivered\`
+
+Listen di room \`user:{userId}\` (auto-join saat connect).
       `.trim(),
       contact: { name: "NTB Hub", email: "support@ntbhub.com" },
       license: { name: "Proprietary" },
@@ -51,10 +60,14 @@ Semua path di bawah prefix \`/api/v1\`.
       { name: "Venue", description: "Venue, layanan, menu, review, promosi" },
       { name: "Event", description: "Event, tiket, check-in QR" },
       { name: "Community", description: "Komunitas, post, member, komentar" },
-      { name: "Finance", description: "Payment, ledger, withdraw, saldo" },
+      { name: "Finance", description: "Payment, ledger, withdraw, saldo, top-up realtime" },
+      {
+        name: "Courier",
+        description: "Registrasi kurir, delivery lifecycle, GPS tracking",
+      },
       {
         name: "Platform",
-        description: "Notifikasi, maps, search, device, courier",
+        description: "Notifikasi, maps, search, device, presence",
       },
     ],
     components: {

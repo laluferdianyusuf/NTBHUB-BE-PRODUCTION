@@ -946,6 +946,11 @@ model Order {
   discount Decimal           @default(0)
   status   TransactionStatus @default(PENDING)
 
+  requiresDelivery  Boolean @default(false)
+  dropoffAddress    String?
+  dropoffLatitude   Float?
+  dropoffLongitude  Float?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -955,6 +960,7 @@ model Order {
 
   items           OrderItem[]
   promotionUsages PromotionUsage[]
+  delivery        Delivery?
 }
 
 model OrderItem {
@@ -1571,9 +1577,15 @@ model Delivery {
   courierId String?
   userId    String?
   bookingId String? @unique
+  orderId   String? @unique
 
   pickupAddress  String
   dropoffAddress String
+
+  pickupLatitude   Float?
+  pickupLongitude  Float?
+  dropoffLatitude  Float?
+  dropoffLongitude Float?
 
   status         DeliveryStatus @default(PENDING)
   attemptCount   Int            @default(0)
@@ -1592,9 +1604,11 @@ model Delivery {
   courier Courier? @relation(fields: [courierId], references: [id])
   user    User?    @relation(fields: [userId], references: [id])
   booking Booking? @relation(fields: [bookingId], references: [id])
+  order   Order?   @relation(fields: [orderId], references: [id])
 
   @@index([courierId, status])
   @@index([bookingId])
+  @@index([orderId])
   @@index([status])
 }
 

@@ -155,6 +155,7 @@ export class UserRepository extends BaseRepository {
         photo: true,
         email: true,
         address: true,
+        phone: true,
         profileViewCount: true,
         profileLikeCount: true,
         isVerified: true,

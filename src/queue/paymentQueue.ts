@@ -1,7 +1,8 @@
 import { Job } from "bullmq";
 import { prisma } from "config/prisma";
-import { publisher } from "config/redis.config";
 import { addJob, createWorker } from "./index";
+import { publishPaymentEvent } from "helpers/paymentEvents";
+import { PaymentEventPayload } from "types/payment-event.types";
 
 import { AccountRepository } from "modules/account/account.repository";
 import { InvoiceRepository } from "modules/invoice/invoice.repository";
@@ -24,6 +25,17 @@ interface PaymentWebhookJob {
   payload: any;
 }
 
+function getTopupNetAmount(payment: { amount: unknown; method: string | null }) {
+  const gross = Number(payment.amount);
+
+  if (payment.method === "QRIS") {
+    const fee = Math.ceil((gross / (1 + 0.007)) * 0.007);
+    return gross - fee;
+  }
+
+  return gross - 4440;
+}
+
 createWorker<PaymentWebhookJob>(
   QUEUE_NAME,
   async (job: Job<PaymentWebhookJob>) => {
@@ -31,7 +43,7 @@ createWorker<PaymentWebhookJob>(
 
     console.log(`[QUEUE] Processing payment ${payload.order_id}`);
 
-    await prisma.$transaction(async (tx) => {
+    const eventPayload = await prisma.$transaction(async (tx) => {
       const payment = await paymentRepository.findByProviderRef(
         payload.order_id,
         tx,
@@ -39,21 +51,20 @@ createWorker<PaymentWebhookJob>(
 
       if (!payment) {
         console.log("Payment not found");
-        return;
+        return null;
       }
 
       if (payment.status === "SUCCESS") {
         console.log("Payment already processed");
-        return;
+        return null;
       }
 
+      const userId = payment.invoice.entityId;
       const status = payload.transaction_status;
+
       if (["capture", "settlement"].includes(status)) {
-        const settlement = await paymentRepository.markSuccess(payment.id, tx);
-
+        await paymentRepository.markSuccess(payment.id, tx);
         await invoiceRepository.markPaid(payment.invoiceId, tx);
-
-        const userId = payment.invoice.entityId;
 
         const userAccount = await accountRepository.findUserAccount(userId, tx);
         const platformAccount = await accountRepository.findPlatformAccount(tx);
@@ -62,7 +73,7 @@ createWorker<PaymentWebhookJob>(
           throw new Error("Account not found");
         }
 
-        const actualAmount = Number(payment.amount) - 4440;
+        const actualAmount = getTopupNetAmount(payment);
 
         await ledgerRepository.createMany(
           [
@@ -89,47 +100,69 @@ createWorker<PaymentWebhookJob>(
           tx,
         );
 
-        await publisher.publish(
-          "transactions-events",
-          JSON.stringify({
-            event: "transaction:success",
-            payload: settlement,
-          }),
+        const newBalance = await balanceRepository.getBalanceByUserId(
+          userId,
+          tx,
         );
+
+        return {
+          userId,
+          paymentId: payment.id,
+          invoiceId: payment.invoiceId,
+          entityType: "TOPUP" as const,
+          entityId: userId,
+          status: "SUCCESS" as const,
+          amount: actualAmount,
+          newBalance: newBalance ?? 0,
+          method: payment.method as PaymentEventPayload["method"],
+          provider: "MIDTRANS" as const,
+        };
       }
 
       if (status === "expire") {
-        const expired = await paymentRepository.markExpired(payment.id, tx);
-
+        await paymentRepository.markExpired(payment.id, tx);
         await invoiceRepository.markExpired(payment.invoiceId, tx);
 
-        await publisher.publish(
-          "transactions-events",
-          JSON.stringify({
-            event: "transaction:expired",
-            payload: expired,
-          }),
-        );
-
         console.log(`[QUEUE] Payment expired ${payment.id}`);
+
+        return {
+          userId,
+          paymentId: payment.id,
+          invoiceId: payment.invoiceId,
+          entityType: "TOPUP" as const,
+          entityId: userId,
+          status: "EXPIRED" as const,
+          amount: Number(payment.amount),
+          method: payment.method as PaymentEventPayload["method"],
+          provider: "MIDTRANS" as const,
+        };
       }
 
       if (["cancel", "deny"].includes(status)) {
-        const cancel = await paymentRepository.markFailed(payment.id, tx);
-
+        await paymentRepository.markFailed(payment.id, tx);
         await invoiceRepository.markFailed(payment.invoiceId, tx);
 
-        await publisher.publish(
-          "transactions-events",
-          JSON.stringify({
-            event: "transaction:failed",
-            payload: cancel,
-          }),
-        );
-
         console.log(`[QUEUE] Payment failed ${payment.id}`);
+
+        return {
+          userId,
+          paymentId: payment.id,
+          invoiceId: payment.invoiceId,
+          entityType: "TOPUP" as const,
+          entityId: userId,
+          status: "FAILED" as const,
+          amount: Number(payment.amount),
+          method: payment.method as PaymentEventPayload["method"],
+          provider: "MIDTRANS" as const,
+        };
       }
+
+      return null;
     });
+
+    if (eventPayload) {
+      publishPaymentEvent(eventPayload);
+    }
   },
 );
 

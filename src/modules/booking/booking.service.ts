@@ -2,6 +2,7 @@ import { BookingType, Prisma } from "@prisma/client";
 import { prisma } from "config/prisma";
 import { publisher } from "config/redis.config";
 import { toLocalDBTime } from "helpers/formatIsoDate";
+import { publishPaymentEvent } from "helpers/paymentEvents";
 import { cancelBookingReminders } from "queue/bookingReminderQueue";
 import {
   cancelBookingLifecycle,
@@ -459,6 +460,9 @@ export class BookingService {
     const platformFee = Number(invoice.amount) * 0.01;
     const venueAmount = Number(invoice.amount) - platformFee;
 
+    let paymentRecord: Awaited<ReturnType<PaymentRepository["create"]>>;
+    let newBalance = 0;
+
     await prisma.$transaction(async (tx) => {
       const userAccount = await accountRepository.findUserAccount(userId);
       const venueAccount = await accountRepository.findVenueAccount(
@@ -470,13 +474,16 @@ export class BookingService {
         throw new Error("Account not found");
       }
 
-      await paymentRepository.create({
-        invoiceId: invoice.id,
-        amount: Number(invoice.amount),
-        method: "WALLET",
-        provider: "NTB_HUB",
-        providerRef: invoice.invoiceNumber,
-      });
+      paymentRecord = await paymentRepository.create(
+        {
+          invoiceId: invoice.id,
+          amount: Number(invoice.amount),
+          method: "WALLET",
+          provider: "NTB_HUB",
+          providerRef: invoice.invoiceNumber,
+        },
+        tx,
+      );
 
       await ledgerRepository.createMany(
         [
@@ -508,7 +515,11 @@ export class BookingService {
       await userBalanceRepository.decrementBalance(
         userId,
         Number(invoice.amount),
+        tx,
       );
+
+      newBalance =
+        (await userBalanceRepository.getBalanceByUserId(userId, tx)) ?? 0;
 
       await venueBalanceRepository.incrementVenueBalance(
         booking.venueId,
@@ -590,7 +601,25 @@ export class BookingService {
       bookings: await this.getVenueDashboard(booking.venueId),
     });
 
-    return { message: "Booking paid successfully" };
+    publishPaymentEvent({
+      userId,
+      paymentId: paymentRecord!.id,
+      invoiceId: invoice.id,
+      entityType: "BOOKING",
+      entityId: booking.id,
+      status: "SUCCESS",
+      amount: Number(invoice.amount),
+      newBalance,
+      method: "WALLET",
+      provider: "NTB_HUB",
+    });
+
+    return {
+      message: "Booking paid successfully",
+      paymentId: paymentRecord!.id,
+      bookingId: booking.id,
+      newBalance,
+    };
   }
 
   async getAllBookings() {

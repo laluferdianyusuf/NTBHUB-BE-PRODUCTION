@@ -28,4 +28,18 @@ router.get(
   asyncHandler(PaymentController.getPaymentsByUser),
 );
 
+router.get(
+  "/:paymentId/status",
+  auth.authenticate,
+  auth.authorizeGlobalRole(["CUSTOMER"]),
+  asyncHandler(PaymentController.getPaymentStatus),
+);
+
+router.get(
+  "/:paymentId/stream",
+  auth.authenticate,
+  auth.authorizeGlobalRole(["CUSTOMER"]),
+  asyncHandler(PaymentController.streamPaymentStatus),
+);
+
 export default router;

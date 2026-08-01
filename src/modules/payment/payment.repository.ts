@@ -69,6 +69,14 @@ export class PaymentRepository {
     });
   }
 
+  async findLatestByInvoiceId(invoiceId: string) {
+    return prisma.payment.findFirst({
+      where: { invoiceId },
+      orderBy: { createdAt: "desc" },
+      include: { invoice: true },
+    });
+  }
+
   async markSuccess(id: string, tx?: Prisma.TransactionClient) {
     const client = this.getClient(tx);
     return client.payment.update({

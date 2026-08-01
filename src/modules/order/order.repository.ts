@@ -8,6 +8,10 @@ export interface CreateOrderData {
   total: Prisma.Decimal;
   status?: TransactionStatus;
   discount?: Prisma.Decimal;
+  requiresDelivery?: boolean;
+  dropoffAddress?: string | null;
+  dropoffLatitude?: number | null;
+  dropoffLongitude?: number | null;
 }
 
 export interface CreateOrderItemData {
@@ -34,6 +38,10 @@ export class OrderRepository {
         bookingId: data.bookingId,
         total: data.total,
         discount: data.discount,
+        requiresDelivery: data.requiresDelivery ?? false,
+        dropoffAddress: data.dropoffAddress,
+        dropoffLatitude: data.dropoffLatitude,
+        dropoffLongitude: data.dropoffLongitude,
       },
     });
   }

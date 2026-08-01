@@ -1,13 +1,52 @@
 import { DeliveryStatus, Prisma } from "@prisma/client";
 import { prisma } from "config/prisma";
 
+const deliveryInclude = {
+  courier: {
+    select: {
+      id: true,
+      userId: true,
+      vehicleType: true,
+      plateNumber: true,
+      photo: true,
+      rating: true,
+      user: {
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          photo: true,
+        },
+      },
+    },
+  },
+  order: {
+    select: {
+      id: true,
+      total: true,
+      venue: {
+        select: {
+          id: true,
+          name: true,
+          address: true,
+        },
+      },
+    },
+  },
+} satisfies Prisma.DeliveryInclude;
+
 export class DeliveryRepository {
   async createDelivery(
     data: {
       userId?: string;
       bookingId?: string | null;
+      orderId?: string | null;
       pickupAddress: string;
       dropoffAddress: string;
+      pickupLatitude?: number | null;
+      pickupLongitude?: number | null;
+      dropoffLatitude?: number | null;
+      dropoffLongitude?: number | null;
     },
     tx?: Prisma.TransactionClient,
   ) {
@@ -17,10 +56,51 @@ export class DeliveryRepository {
       data: {
         userId: data.userId ?? null,
         bookingId: data.bookingId ?? null,
+        orderId: data.orderId ?? null,
         pickupAddress: data.pickupAddress,
         dropoffAddress: data.dropoffAddress,
+        pickupLatitude: data.pickupLatitude ?? null,
+        pickupLongitude: data.pickupLongitude ?? null,
+        dropoffLatitude: data.dropoffLatitude ?? null,
+        dropoffLongitude: data.dropoffLongitude ?? null,
         status: "PENDING",
       },
+    });
+  }
+
+  async findByIdPublic(id: string) {
+    return prisma.delivery.findUnique({
+      where: { id },
+      include: deliveryInclude,
+    });
+  }
+
+  async findByOrderId(orderId: string) {
+    return prisma.delivery.findUnique({
+      where: { orderId },
+      include: deliveryInclude,
+    });
+  }
+
+  async findActiveByCourierId(courierId: string) {
+    return prisma.delivery.findFirst({
+      where: {
+        courierId,
+        status: {
+          in: ["ASSIGNED", "PICKED_UP", "ON_THE_WAY"],
+        },
+      },
+      include: deliveryInclude,
+      orderBy: { updatedAt: "desc" },
+    });
+  }
+
+  async findHistoryByCourierId(courierId: string, limit = 20) {
+    return prisma.delivery.findMany({
+      where: { courierId },
+      include: deliveryInclude,
+      orderBy: { createdAt: "desc" },
+      take: limit,
     });
   }
 
@@ -46,12 +126,6 @@ export class DeliveryRepository {
     return result[0];
   }
 
-  async findById(id: string, tx: Prisma.TransactionClient) {
-    return tx.delivery.findUnique({
-      where: { id },
-    });
-  }
-
   async assignCourier(
     deliveryId: string,
     courierId: string,
@@ -63,6 +137,33 @@ export class DeliveryRepository {
         courierId,
         status: "ASSIGNED",
         assignedAt: new Date(),
+      },
+    });
+  }
+
+  async markPickedUp(deliveryId: string, tx: Prisma.TransactionClient) {
+    return tx.delivery.update({
+      where: { id: deliveryId },
+      data: {
+        status: "PICKED_UP",
+        pickedUpAt: new Date(),
+      },
+    });
+  }
+
+  async markOnTheWay(deliveryId: string, tx: Prisma.TransactionClient) {
+    return tx.delivery.update({
+      where: { id: deliveryId },
+      data: { status: "ON_THE_WAY" },
+    });
+  }
+
+  async markDelivered(deliveryId: string, tx: Prisma.TransactionClient) {
+    return tx.delivery.update({
+      where: { id: deliveryId },
+      data: {
+        status: "DELIVERED",
+        deliveredAt: new Date(),
       },
     });
   }
@@ -94,7 +195,8 @@ export class DeliveryRepository {
       where: { id: deliveryId },
       data: {
         status: "PENDING",
-        courierId: undefined,
+        courierId: null,
+        assignedAt: null,
       },
     });
   }

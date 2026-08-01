@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "config/prisma";
+import { publishPaymentEvent } from "helpers/paymentEvents";
 
 import { dispatchAssignDelivery } from "queue/dispatch";
 import { DeliveryRepository } from "modules/courier/delivery.repository";
@@ -36,13 +37,25 @@ export class OrderServices {
     userId,
     items,
     promoCode,
+    requiresDelivery = false,
+    dropoffAddress,
+    dropoffLatitude,
+    dropoffLongitude,
   }: {
     venueId: string;
     userId: string;
     promoCode?: string;
+    requiresDelivery?: boolean;
+    dropoffAddress?: string;
+    dropoffLatitude?: number;
+    dropoffLongitude?: number;
     items: { menuId: string; quantity: number }[];
   }) {
     if (!items.length) throw new Error("Order items required");
+
+    if (requiresDelivery && !dropoffAddress) {
+      throw new Error("Dropoff address is required for delivery orders");
+    }
 
     const venue = await venueRepository.findVenueById(venueId);
     if (!venue) throw new Error("No venue found");
@@ -112,6 +125,10 @@ export class OrderServices {
           bookingId: null,
           total: new Prisma.Decimal(finalTotal),
           discount: new Prisma.Decimal(discount),
+          requiresDelivery,
+          dropoffAddress: requiresDelivery ? dropoffAddress : null,
+          dropoffLatitude: requiresDelivery ? dropoffLatitude : null,
+          dropoffLongitude: requiresDelivery ? dropoffLongitude : null,
         },
         tx,
       );
@@ -189,7 +206,7 @@ export class OrderServices {
       await userService.verifyPin(userId, pin);
     }
 
-    return prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       const order = await orderRepository.findById(orderId, tx);
 
       if (!order || order.userId !== userId) {
@@ -229,7 +246,7 @@ export class OrderServices {
         throw new Error("Insufficient balance");
       }
 
-      const paymentId = `PAY-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+      const providerRef = `PAY-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 
       await userBalanceRepository.decrementBalance(
         userId,
@@ -237,13 +254,16 @@ export class OrderServices {
         tx,
       );
 
-      const payment = await paymentRepository.create({
-        invoiceId: invoice.id,
-        amount: Number(invoice.amount),
-        method: "WALLET",
-        provider: "NTB_HUB",
-        providerRef: paymentId,
-      });
+      const payment = await paymentRepository.create(
+        {
+          invoiceId: invoice.id,
+          amount: Number(invoice.amount),
+          method: "WALLET",
+          provider: "NTB_HUB",
+          providerRef,
+        },
+        tx,
+      );
 
       await ledgerRepository.createMany(
         [
@@ -269,19 +289,63 @@ export class OrderServices {
 
       await orderRepository.updateStatus(orderId, "SUCCESS", tx);
 
-      const delivery = await deliveryRepository.createDelivery({
-        userId: order.userId,
-        bookingId: order.bookingId ?? null,
-        pickupAddress: venue?.address as string,
-        dropoffAddress: user?.address as string,
-      });
+      const newBalance =
+        (await userBalanceRepository.getBalanceByUserId(userId, tx)) ?? 0;
 
-      setImmediate(() => {
-        dispatchAssignDelivery(delivery.id);
-      });
+      let deliveryId: string | null = null;
 
-      return payment;
+      if (order.requiresDelivery) {
+        const delivery = await deliveryRepository.createDelivery(
+          {
+            userId: order.userId,
+            bookingId: order.bookingId ?? null,
+            orderId: order.id,
+            pickupAddress: venue?.address ?? "Venue address unavailable",
+            dropoffAddress: order.dropoffAddress ?? user?.address ?? "",
+            pickupLatitude: venue?.latitude ?? null,
+            pickupLongitude: venue?.longitude ?? null,
+            dropoffLatitude: order.dropoffLatitude ?? null,
+            dropoffLongitude: order.dropoffLongitude ?? null,
+          },
+          tx,
+        );
+        deliveryId = delivery.id;
+      }
+
+      return {
+        payment,
+        invoice,
+        order,
+        newBalance,
+        deliveryId,
+      };
     });
+
+    if (result.deliveryId) {
+      setImmediate(() => {
+        dispatchAssignDelivery(result.deliveryId!);
+      });
+    }
+
+    publishPaymentEvent({
+      userId,
+      paymentId: result.payment.id,
+      invoiceId: result.invoice.id,
+      entityType: "ORDER",
+      entityId: result.order.id,
+      status: "SUCCESS",
+      amount: Number(result.invoice.amount),
+      newBalance: result.newBalance,
+      method: "WALLET",
+      provider: "NTB_HUB",
+    });
+
+    return {
+      ...result.payment,
+      newBalance: result.newBalance,
+      orderId: result.order.id,
+      deliveryId: result.deliveryId,
+    };
   }
 
   async getAllByUser(userId: string) {

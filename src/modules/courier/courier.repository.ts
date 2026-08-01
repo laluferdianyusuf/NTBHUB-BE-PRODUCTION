@@ -1,9 +1,48 @@
-import { Prisma } from "@prisma/client";
+import { CourierStatus, Prisma, VehicleType } from "@prisma/client";
+import { prisma } from "config/prisma";
 
 export class CourierRepository {
-  async findById(id: string, tx: Prisma.TransactionClient) {
-    return tx.courier.findUnique({
+  async findByUserId(userId: string) {
+    return prisma.courier.findUnique({
+      where: { userId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            phone: true,
+            photo: true,
+          },
+        },
+      },
+    });
+  }
+
+  async findById(id: string, tx?: Prisma.TransactionClient) {
+    const client = tx ?? prisma;
+    return client.courier.findUnique({
       where: { id },
+    });
+  }
+
+  async create(
+    data: {
+      userId: string;
+      vehicleType: VehicleType;
+      plateNumber?: string;
+      photo?: string;
+    },
+    tx?: Prisma.TransactionClient,
+  ) {
+    const client = tx ?? prisma;
+    return client.courier.create({
+      data: {
+        userId: data.userId,
+        vehicleType: data.vehicleType,
+        plateNumber: data.plateNumber,
+        photo: data.photo,
+        status: "OFFLINE",
+      },
     });
   }
 
@@ -55,6 +94,18 @@ export class CourierRepository {
     );
   }
 
+  async updateStatus(
+    id: string,
+    status: CourierStatus,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const client = tx ?? prisma;
+    return client.courier.update({
+      where: { id },
+      data: { status },
+    });
+  }
+
   async setOnDelivery(id: string, tx: Prisma.TransactionClient) {
     return tx.courier.update({
       where: { id },
@@ -69,6 +120,31 @@ export class CourierRepository {
       where: { id },
       data: {
         status: "ONLINE",
+      },
+    });
+  }
+
+  async incrementTrips(id: string, tx: Prisma.TransactionClient) {
+    return tx.courier.update({
+      where: { id },
+      data: {
+        totalTrips: { increment: 1 },
+      },
+    });
+  }
+
+  async logAvailability(
+    courierId: string,
+    status: CourierStatus,
+    note?: string,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const client = tx ?? prisma;
+    return client.courierAvailabilityLog.create({
+      data: {
+        courierId,
+        status,
+        note,
       },
     });
   }

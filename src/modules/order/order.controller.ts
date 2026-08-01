@@ -8,13 +8,25 @@ const orderService = new OrderServices();
 
 export class OrderControllers {
   static async createNewOrder(req: Request, res: Response) {      const userId = req.user?.id as string;
-      const { venueId, items, promoCode } = req.body;
+      const {
+        venueId,
+        items,
+        promoCode,
+        requiresDelivery,
+        dropoffAddress,
+        dropoffLatitude,
+        dropoffLongitude,
+      } = req.body;
 
       const result = await runService(() => orderService.createNewOrder({
         venueId,
         userId,
         items,
         promoCode,
+        requiresDelivery,
+        dropoffAddress,
+        dropoffLatitude,
+        dropoffLongitude,
       }));
 
       return sendSuccess(res, result, "Order created", 201);

@@ -23,7 +23,10 @@
  * /bookings/booking/payment/{id}:
  *   put:
  *     tags: [Booking]
- *     summary: Pay for a pending booking
+ *     summary: Bayar booking pending via wallet
+ *     description: |
+ *       Debit saldo NTB Hub langsung. Response berisi `newBalance` dan `paymentId`.
+ *       Emit Socket.IO `payment:completed` + `balance:updated`.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - $ref: '#/components/parameters/UuidPath'
@@ -32,9 +35,20 @@
  *         application/json:
  *           schema:
  *             $ref: '#/components/schemas/BookingPaymentRequest'
+ *           example:
+ *             pin: "123456"
  *     responses:
- *       200:
- *         $ref: '#/components/responses/Success'
+ *       201:
+ *         description: Booking paid
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/ApiSuccessResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       $ref: '#/components/schemas/BookingPaymentResponse'
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *
@@ -213,29 +227,82 @@
  *       200:
  *         $ref: '#/components/responses/Success'
  *
- * /orders/order/create:
+ * /orders/create-order:
  *   post:
  *     tags: [Booking]
- *     summary: Create food/service order
+ *     summary: Buat order makanan/minuman
+ *     description: |
+ *       Set `requiresDelivery: true` jika order perlu diantar kurir.
+ *       Wajib sertakan `dropoffAddress` (+ koordinat opsional) untuk delivery.
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             properties:
- *               venueId: { type: string, format: uuid }
- *               items:
- *                 type: array
- *                 items:
- *                   type: object
- *                   properties:
- *                     menuId: { type: string, format: uuid }
- *                     quantity: { type: integer }
+ *             $ref: '#/components/schemas/CreateOrderRequest'
+ *           example:
+ *             venueId: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+ *             requiresDelivery: true
+ *             dropoffAddress: "Jl. Pejanggik No. 88, Mataram"
+ *             dropoffLatitude: -8.5833
+ *             dropoffLongitude: 116.1167
+ *             items:
+ *               - menuId: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+ *                 quantity: 2
  *     responses:
  *       201:
  *         $ref: '#/components/responses/Created'
+ *
+ * /orders/pay-order/{orderId}:
+ *   post:
+ *     tags: [Booking]
+ *     summary: Bayar order via wallet
+ *     description: |
+ *       Jika `requiresDelivery: true`, otomatis membuat delivery dan dispatch kurir.
+ *       Response include `deliveryId` untuk tracking.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - $ref: '#/components/parameters/OrderIdPath'
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/OrderPaymentRequest'
+ *           example:
+ *             pin: "123456"
+ *     responses:
+ *       203:
+ *         description: Order paid
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/ApiSuccessResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       $ref: '#/components/schemas/OrderPaymentResponse'
+ *
+ * /orders/cancel-order/{orderId}:
+ *   post:
+ *     tags: [Booking]
+ *     summary: Batalkan order pending
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - $ref: '#/components/parameters/OrderIdPath'
+ *     responses:
+ *       203:
+ *         $ref: '#/components/responses/Success'
+ *
+ * /orders/users:
+ *   get:
+ *     tags: [Booking]
+ *     summary: List order user
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         $ref: '#/components/responses/Success'
  *
  * /invoice/invoice/{bookingId}:
  *   get:

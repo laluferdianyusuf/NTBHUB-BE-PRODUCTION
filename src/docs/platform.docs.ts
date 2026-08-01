@@ -270,23 +270,6 @@
  *       201:
  *         $ref: '#/components/responses/Created'
  *
- * /courier/register:
- *   post:
- *     tags: [Platform]
- *     summary: Register as courier
- *     security: [{ bearerAuth: [] }]
- *     requestBody:
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               vehicleType: { type: string, enum: [MOTORCYCLE, CAR, BICYCLE] }
- *               plateNumber: { type: string }
- *     responses:
- *       201:
- *         $ref: '#/components/responses/Created'
- *
  * /logs/log/logs:
  *   get:
  *     tags: [Platform]

@@ -1,7 +1,7 @@
 import { Job } from "bullmq";
-import { publisher } from "config/redis.config";
-import { PaymentRepository } from "modules/payment/payment.repository";
 import { addDelayedJob, cancelJob, createWorker } from "./index";
+import { publishPaymentEvent } from "helpers/paymentEvents";
+import { PaymentRepository } from "modules/payment/payment.repository";
 
 const paymentRepository = new PaymentRepository();
 const QUEUE_NAME = "transaction-expiry";
@@ -25,16 +25,17 @@ createWorker<TransactionQueueJobData>(
     if (transaction.status !== "SUCCESS") {
       const expired = await paymentRepository.markExpired(transaction.id);
 
-      await publisher.publish(
-        "transactions-events",
-        JSON.stringify({
-          event: "transaction:expired",
-          payload: {
-            transactionId: expired.id,
-            amount: expired.amount,
-          },
-        }),
-      );
+      publishPaymentEvent({
+        userId: expired.invoice.entityId,
+        paymentId: expired.id,
+        invoiceId: expired.invoiceId,
+        entityType: "TOPUP",
+        entityId: expired.invoice.entityId,
+        status: "EXPIRED",
+        amount: Number(expired.amount),
+        method: expired.method as "VA" | "QRIS" | "WALLET",
+        provider: "MIDTRANS",
+      });
 
       console.log(`[QUEUE] Transaction ${expired.id} expired`);
     }
