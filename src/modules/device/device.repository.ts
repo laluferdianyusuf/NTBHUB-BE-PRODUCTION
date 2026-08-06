@@ -15,66 +15,35 @@ export class DeviceRepository {
     osName?: string;
     osVersion?: string;
     deviceModel?: string;
+    deviceId: string;
     userId?: string; // optional
     venueId?: string;
   }) {
-    if (data.userId) {
-      return prisma.device.upsert({
-        where: {
-          token_userId: {
-            token: data.token,
-            userId: data.userId,
-          },
+    return prisma.device.upsert({
+      where: {
+        userId_deviceId: {
+          userId: data.userId,
+          deviceId: data.deviceId,
         },
-        update: {
-          platform: data.platform,
-          osName: data.osName,
-          osVersion: data.osVersion,
-          deviceModel: data.deviceModel,
-          expoToken: data.expoToken,
-          updatedAt: new Date(),
-        },
-        create: {
-          token: data.token,
-          expoToken: data.expoToken,
-          platform: data.platform,
-          osName: data.osName,
-          osVersion: data.osVersion,
-          deviceModel: data.deviceModel,
-          user: { connect: { id: data.userId } },
-          venue: data.venueId ? { connect: { id: data.venueId } } : undefined,
-        },
-      });
-    } else {
-      const existing = await prisma.device.findFirst({
-        where: { token: data.token },
-      });
-
-      if (existing) {
-        return prisma.device.update({
-          where: { id: existing.id },
-          data: {
-            platform: data.platform,
-            osName: data.osName,
-            osVersion: data.osVersion,
-            deviceModel: data.deviceModel,
-            expoToken: data.expoToken,
-            updatedAt: new Date(),
-          },
-        });
-      } else {
-        return prisma.device.create({
-          data: {
-            token: data.token,
-            expoToken: data.expoToken,
-            platform: data.platform,
-            osName: data.osName,
-            osVersion: data.osVersion,
-            deviceModel: data.deviceModel,
-          },
-        });
-      }
-    }
+      },
+      update: {
+        token: data.token,
+        expoToken: data.expoToken,
+        platform: data.platform,
+        updatedAt: new Date(),
+      },
+      create: {
+        userId: data.userId,
+        venueId: data.venueId,
+        token: data.token,
+        expoToken: data.expoToken,
+        platform: data.platform,
+        deviceId: data.deviceId,
+        deviceModel: data.deviceModel,
+        osName: data.osName,
+        osVersion: data.osVersion,
+      },
+    });
   }
 
   async findByUserId(userId: string) {

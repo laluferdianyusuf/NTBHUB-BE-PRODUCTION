@@ -11,6 +11,7 @@ export class DeviceService {
   async registerDevice(data: {
     venueId?: string;
     userId?: string;
+    deviceId: string;
     token: string;
     expoToken: string;
     platform?: string;
@@ -35,6 +36,7 @@ export class DeviceService {
           osName: data.osName,
           osVersion: data.osVersion,
           deviceModel: data.deviceModel,
+          deviceId: data.deviceId,
         } as any);
 
         return success.success201("User device registered", device);

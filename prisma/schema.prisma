@@ -532,6 +532,7 @@ model Device {
   buildId      String?
   osVersion    String?
   deviceModel  String?
+  deviceId    String?
   isOnline     Boolean   @default(false)
   lastActiveAt DateTime?
   createdAt    DateTime  @default(now())
@@ -541,8 +542,8 @@ model Device {
   venue   Venue?  @relation(fields: [venueId], references: [id])
   venueId String?
 
-  @@unique([token, userId])
-  @@index([userId])
+@@unique([userId, deviceId]) 
+  @@index([token])
 }
 
 model LocationTracking {
