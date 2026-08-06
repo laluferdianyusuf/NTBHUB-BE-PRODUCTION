@@ -13,6 +13,8 @@ export class DeviceRepository {
     expoToken: string;
     platform?: string;
     osName?: string;
+    buildId?: string;
+    lastActiveAt?: string;
     osVersion?: string;
     deviceModel?: string;
     deviceId: string;
@@ -27,9 +29,17 @@ export class DeviceRepository {
         },
       },
       update: {
+        userId: data.userId,
+        venueId: data.venueId,
         token: data.token,
         expoToken: data.expoToken,
         platform: data.platform,
+        deviceId: data.deviceId,
+        deviceModel: data.deviceModel,
+        buildId: data.buildId,
+        lastActiveAt: data.lastActiveAt,
+        osName: data.osName,
+        osVersion: data.osVersion,
         updatedAt: new Date(),
       },
       create: {
@@ -40,6 +50,8 @@ export class DeviceRepository {
         platform: data.platform,
         deviceId: data.deviceId,
         deviceModel: data.deviceModel,
+        buildId: data.buildId,
+        lastActiveAt: data.lastActiveAt,
         osName: data.osName,
         osVersion: data.osVersion,
       },

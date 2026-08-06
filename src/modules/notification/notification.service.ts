@@ -7,14 +7,14 @@ import {
   Role,
 } from "@prisma/client";
 import { error, success } from "helpers/return";
-import { notificationQueue } from "queue/notificationQueue";
 import { DeviceRepository } from "modules/device/device.repository";
-import { UserRepository } from "modules/users/users.repository";
-import { UserRoleRepository } from "modules/user-role/user-role.repository";
-import { NotificationJobData } from "types/notification.types";
-import { uploadToCloudinary } from "utils/image";
 import { NotificationRepository } from "modules/notification/notification.repository";
+import { UserRoleRepository } from "modules/user-role/user-role.repository";
+import { UserRepository } from "modules/users/users.repository";
+import { notificationQueue } from "queue/notificationQueue";
+import { NotificationJobData } from "types/notification.types";
 import firebase from "utils/firebase";
+import { uploadToCloudinary } from "utils/image";
 
 const notificationRepository = new NotificationRepository();
 const userRepository = new UserRepository();
