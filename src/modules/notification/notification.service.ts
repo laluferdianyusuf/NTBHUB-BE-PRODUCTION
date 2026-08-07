@@ -540,6 +540,12 @@ export class NotificationService {
     return items;
   }
 
+  async markAsRead(id: string) {
+    const items = await notificationRepository.markAsRead(id);
+
+    return items;
+  }
+
   async markAllAsUnread(
     recipientType: NotificationRecipientType,
     recipientId: string,

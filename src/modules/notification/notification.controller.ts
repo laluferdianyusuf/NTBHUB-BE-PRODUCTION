@@ -48,6 +48,12 @@ export class NotificationController {
     return sendSuccess(res, result, "Notification marked as read");
   }
 
+  static async markAsRead(req: Request, res: Response) {
+    const { id } = req.params;
+    const result = await runService(() => notificationService.markAsRead(id));
+    return sendSuccess(res, result, "Notification marked as read");
+  }
+
   static async markAllAsUnread(req: Request, res: Response) {
     const { recipientId } = req.params;
     const { recipientType } = req.query;
