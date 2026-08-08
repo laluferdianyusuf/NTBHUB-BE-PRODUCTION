@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "config/prisma";
 import { publishPaymentEvent } from "helpers/paymentEvents";
 
-import { dispatchAssignDelivery } from "queue/dispatch";
+import { AccountRepository } from "modules/account/account.repository";
 import { DeliveryRepository } from "modules/courier/delivery.repository";
 import { InvoiceRepository } from "modules/invoice/invoice.repository";
 import { LedgerRepository } from "modules/ledger/ledger.repository";
@@ -10,12 +10,12 @@ import { MenuRepository } from "modules/menu/menu.repository";
 import { OrderItemRepository } from "modules/order/order-item.repository";
 import { OrderRepository } from "modules/order/order.repository";
 import { PaymentRepository } from "modules/payment/payment.repository";
+import { PromotionService } from "modules/promotion/promotion.service";
 import { UserBalanceRepository } from "modules/user-balance/user-balance.repository";
 import { UserRepository } from "modules/users/users.repository";
-import { VenueRepository } from "modules/venue/venue.repository";
-import { AccountRepository } from "modules/account/account.repository";
-import { PromotionService } from "modules/promotion/promotion.service";
 import { UserService } from "modules/users/users.service";
+import { VenueRepository } from "modules/venue/venue.repository";
+import { dispatchAssignDelivery } from "queue/dispatch";
 
 const orderRepository = new OrderRepository();
 const orderItemRepository = new OrderItemRepository();
@@ -54,10 +54,11 @@ export class OrderServices {
     if (!items.length) throw new Error("Order items required");
 
     if (requiresDelivery && !dropoffAddress) {
-      throw new Error("Dropoff address is required for delivery orders");
+      throw new Error("Drop off address is required for delivery orders");
     }
 
     const venue = await venueRepository.findVenueById(venueId);
+
     if (!venue) throw new Error("No venue found");
 
     const invoiceNumber = `INV-${Date.now()}-${crypto
@@ -89,7 +90,6 @@ export class OrderServices {
         orderItems.push({
           menuId: menu.id,
           quantity: item.quantity,
-          price: menu.price,
           subtotal,
         });
 
@@ -137,7 +137,6 @@ export class OrderServices {
         orderItems.push({
           menuId: free.menuId,
           quantity: free.quantity,
-          price: 0,
           subtotal: 0,
         });
       }

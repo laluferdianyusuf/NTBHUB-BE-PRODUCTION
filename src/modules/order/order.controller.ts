@@ -1,24 +1,26 @@
 import { Request, Response } from "express";
-import { runService } from "shared/http/serviceError";
 import { sendSuccess } from "shared/http/response";
+import { runService } from "shared/http/serviceError";
 
 import { OrderServices } from "modules/order/order.service";
 
 const orderService = new OrderServices();
 
 export class OrderControllers {
-  static async createNewOrder(req: Request, res: Response) {      const userId = req.user?.id as string;
-      const {
-        venueId,
-        items,
-        promoCode,
-        requiresDelivery,
-        dropoffAddress,
-        dropoffLatitude,
-        dropoffLongitude,
-      } = req.body;
+  static async createNewOrder(req: Request, res: Response) {
+    const userId = req.user?.id as string;
+    const {
+      venueId,
+      items,
+      promoCode,
+      requiresDelivery,
+      dropoffAddress,
+      dropoffLatitude,
+      dropoffLongitude,
+    } = req.body;
 
-      const result = await runService(() => orderService.createNewOrder({
+    const result = await runService(() =>
+      orderService.createNewOrder({
         venueId,
         userId,
         items,
@@ -27,36 +29,40 @@ export class OrderControllers {
         dropoffAddress,
         dropoffLatitude,
         dropoffLongitude,
-      }));
+      }),
+    );
 
-      return sendSuccess(res, result, "Order created", 201);
-    
+    return sendSuccess(res, result, "Order created", 201);
   }
 
-  static async cancelOrder(req: Request, res: Response) {      const { orderId } = req.params;
-      const userId = req.user?.id as string;
+  static async cancelOrder(req: Request, res: Response) {
+    const { orderId } = req.params;
+    const userId = req.user?.id as string;
 
-      const result = await runService(() => orderService.cancelOrder(orderId, userId));
+    const result = await runService(() =>
+      orderService.cancelOrder(orderId, userId),
+    );
 
-      return sendSuccess(res, result, "Order created", 203);
-    
+    return sendSuccess(res, result, "Order created", 203);
   }
 
-  static async payOrder(req: Request, res: Response) {      const { orderId } = req.params;
-      const userId = req.user?.id as string;
-      const { pin } = req.body;
+  static async payOrder(req: Request, res: Response) {
+    const { orderId } = req.params;
+    const userId = req.user?.id as string;
+    const { pin } = req.body;
 
-      const result = await runService(() => orderService.payOrder(orderId, userId, pin));
+    const result = await runService(() =>
+      orderService.payOrder(orderId, userId, pin),
+    );
 
-      return sendSuccess(res, result, "Order payed", 203);
-    
+    return sendSuccess(res, result, "Order payed", 203);
   }
 
-  static async findAllUsersOrder(req: Request, res: Response) {      const userId = req.user?.id as string;
+  static async findAllUsersOrder(req: Request, res: Response) {
+    const userId = req.user?.id as string;
 
-      const result = await runService(() => orderService.getAllByUser(userId));
+    const result = await runService(() => orderService.getAllByUser(userId));
 
-      return sendSuccess(res, result, "Order retrieved");
-    
+    return sendSuccess(res, result, "Order retrieved");
   }
 }

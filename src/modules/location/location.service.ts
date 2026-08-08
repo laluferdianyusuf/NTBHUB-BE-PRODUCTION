@@ -16,7 +16,9 @@ export class LocationService {
   async getNearbyUsers(userId: string, radius = 2000) {
     const pos = await redis.geopos(LOCATION_KEY, userId);
 
-    if (!pos || !pos[0]) return [];
+    if (!pos || !pos[0]) {
+      return [];
+    }
 
     const [lng, lat] = pos[0];
 
@@ -34,50 +36,21 @@ export class LocationService {
       results
         .map((item: any) => ({
           userId: String(item[0]),
-          distance: parseFloat(item[1]),
+          distance: Number(item[1]),
           longitude: Number(item[2][0]),
           latitude: Number(item[2][1]),
         }))
-        .filter((u) => String(u.userId) !== String(userId))
+        .filter((loc) => loc.userId !== String(userId))
         .map(async (loc) => {
-          try {
-            const cached = await redis.get(`user:${loc.userId}`);
+          const isActive = await redis.exists(`location:${loc.userId}`);
 
-            if (cached) {
-              const user = JSON.parse(cached);
+          if (!isActive) {
+            await redis.zrem(LOCATION_KEY, loc.userId);
 
-              return {
-                ...loc,
-                username: user.username,
-                avatar: user.avatar,
-              };
-            }
-
-            const user = await userRepository.findById(loc.userId);
-
-            if (user) {
-              const userData = {
-                username: user.username,
-                avatar: user.photo,
-              };
-
-              await redis.set(
-                `user:${loc.userId}`,
-                JSON.stringify(userData),
-                "EX",
-                3600,
-              );
-
-              return {
-                ...loc,
-                ...userData,
-              };
-            }
-
-            return loc;
-          } catch {
-            return loc;
+            return null;
           }
+
+          return loc;
         }),
     );
 
