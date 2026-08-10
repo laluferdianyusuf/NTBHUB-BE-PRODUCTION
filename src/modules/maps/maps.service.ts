@@ -1,5 +1,5 @@
-import { redisCache } from "config/redis.config";
 import { getEnv } from "config/env";
+import { redisCache } from "config/redis.config";
 import { MapsRepository } from "./maps.repository";
 
 const CACHE_TTL = 60 * 5;
@@ -27,11 +27,7 @@ export class MapsService {
 
     if (data.status !== "OK" || !data.predictions) return [];
 
-    const filtered = data.predictions.filter((p: { types: string[] }) =>
-      p.types.some((t) => allowedTypes.includes(t)),
-    );
-
-    const slim = filtered.map(
+    const slim = data.predictions.map(
       (p: {
         place_id: string;
         structured_formatting: { main_text: string; secondary_text: string };
