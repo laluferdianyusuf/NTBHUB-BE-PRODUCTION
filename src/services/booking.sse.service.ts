@@ -17,27 +17,66 @@ const TERMINAL_EVENTS = new Set([
   "booking:completed",
   "booking:expired",
 ]);
+let subscriberInitializing: Promise<void> | null = null;
 
-async function ensureBookingSubscriber() {
-  if (subscriberReady) return;
+async function ensureBookingSubscriber(): Promise<void> {
+  if (subscriberReady) {
+    return;
+  }
 
-  await bookingSubscriber.subscribe(BOOKING_SSE_CHANNEL);
+  if (subscriberInitializing) {
+    return subscriberInitializing;
+  }
 
-  bookingSubscriber.on("message", (channel, message) => {
-    if (channel !== BOOKING_SSE_CHANNEL) {
-      return;
-    }
-
+  subscriberInitializing = (async () => {
     try {
-      const { bookingId, event, payload } = JSON.parse(message);
+      bookingSubscriber.on("message", (channel, message) => {
+        if (channel !== BOOKING_SSE_CHANNEL) {
+          return;
+        }
 
-      deliverToBookingClients(bookingId, event, payload);
+        try {
+          const parsed = JSON.parse(message);
+
+          const { bookingId, event, payload } = parsed;
+
+          if (!bookingId || !event) {
+            console.warn("[BOOKING SSE] Invalid Redis event:", parsed);
+
+            return;
+          }
+
+          console.log("[BOOKING SSE] Redis event:", {
+            bookingId,
+            event,
+          });
+
+          deliverToBookingClients(String(bookingId), String(event), payload);
+        } catch (error) {
+          console.error(
+            "[BOOKING SSE] Failed to process Redis message:",
+            error,
+          );
+        }
+      });
+
+      await bookingSubscriber.subscribe(BOOKING_SSE_CHANNEL);
+
+      subscriberReady = true;
+
+      console.log("[BOOKING SSE] Redis subscriber ready:", BOOKING_SSE_CHANNEL);
     } catch (error) {
-      console.error("[BOOKING SSE] Failed to process:", error);
-    }
-  });
+      subscriberReady = false;
 
-  subscriberReady = true;
+      console.error("[BOOKING SSE] Failed to initialize subscriber:", error);
+
+      throw error;
+    } finally {
+      subscriberInitializing = null;
+    }
+  })();
+
+  return subscriberInitializing;
 }
 
 function deliverToBookingClients(
@@ -47,41 +86,83 @@ function deliverToBookingClients(
 ) {
   const connections = clients.get(bookingId);
 
-  if (!connections?.size) {
-    console.log("[BOOKING SSE] No clients:", bookingId);
+  if (!connections || connections.size === 0) {
+    console.log("[BOOKING SSE] No active clients:", bookingId);
 
     return;
   }
 
   const chunk = `event: ${event}\n` + `data: ${JSON.stringify(payload)}\n\n`;
 
-  for (const res of connections) {
-    res.write(chunk);
+  const isTerminal = TERMINAL_EVENTS.has(event);
 
-    if (TERMINAL_EVENTS.has(event)) {
-      res.end();
+  console.log("[BOOKING SSE] Delivering:", {
+    bookingId,
+    event,
+    clients: connections.size,
+    terminal: isTerminal,
+  });
+
+  for (const res of connections) {
+    try {
+      if (res.writableEnded || res.destroyed) {
+        removeBookingClient(bookingId, res);
+        continue;
+      }
+
+      res.write(chunk);
+
+      if (isTerminal) {
+        res.end();
+      }
+    } catch (error) {
+      console.error("[BOOKING SSE] Failed to write:", error);
+
+      removeBookingClient(bookingId, res);
+
+      try {
+        res.end();
+      } catch {
+        // ignore
+      }
     }
   }
 
-  if (TERMINAL_EVENTS.has(event)) {
+  if (isTerminal) {
     clients.delete(bookingId);
   }
 }
 
 function addBookingClient(bookingId: string, res: Response) {
-  if (!clients.has(bookingId)) {
-    clients.set(bookingId, new Set());
+  let connections = clients.get(bookingId);
+
+  if (!connections) {
+    connections = new Set<Response>();
+
+    clients.set(bookingId, connections);
   }
 
-  clients.get(bookingId)!.add(res);
+  connections.add(res);
+
+  console.log("[BOOKING SSE] Client added:", {
+    bookingId,
+    totalClients: connections.size,
+  });
 }
 
 function removeBookingClient(bookingId: string, res: Response) {
   const connections = clients.get(bookingId);
 
-  if (!connections) return;
+  if (!connections) {
+    return;
+  }
 
   connections.delete(res);
+
+  console.log("[BOOKING SSE] Client removed:", {
+    bookingId,
+    totalClients: connections.size,
+  });
 
   if (connections.size === 0) {
     clients.delete(bookingId);
