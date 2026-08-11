@@ -56,8 +56,6 @@ export class UserService {
     role: Role;
     file?: Express.Multer.File;
   }) {
-    console.log(data);
-
     const existing = await userRepository.findByEmail(data.email);
     if (existing) throw new Error("Email already registered");
 
@@ -74,8 +72,6 @@ export class UserService {
     const hashedPin = await bcrypt.hash(pin, 10);
 
     let user;
-
-    console.log(pin);
 
     try {
       user = await prisma.$transaction(async (tx) => {
@@ -138,8 +134,6 @@ export class UserService {
         },
       };
     } catch (err) {
-      console.log(err);
-
       if (user?.id) {
         await userRepository.delete(user.id);
 
@@ -332,7 +326,6 @@ export class UserService {
     }
 
     const pin = crypto.randomInt(100000, 999999).toString();
-    console.log(pin);
 
     const hashedPin = await bcrypt.hash(pin, 10);
 
@@ -453,6 +446,8 @@ export class UserService {
           },
           tx,
         );
+
+        await userBalanceRepository.generateInitialBalance(newUser.id, tx);
 
         await pointRepository.generatePoints(
           {
