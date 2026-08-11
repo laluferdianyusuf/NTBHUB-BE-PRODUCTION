@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { runService } from "shared/http/serviceError";
 import { sendSuccess } from "shared/http/response";
 import { BookingService } from "./booking.service";
+import { subscribeBookingStream } from "services/booking.sse.service";
 
 const bookingService = new BookingService();
 
@@ -38,10 +39,8 @@ export class BookingController {
   }
 
   static async getBookingByVenueId(req: Request, res: Response) {
-    const tab =
-      typeof req.query.tab === "string" ? req.query.tab : "all_book";
-    const search =
-      typeof req.query.search === "string" ? req.query.search : "";
+    const tab = typeof req.query.tab === "string" ? req.query.tab : "all_book";
+    const search = typeof req.query.search === "string" ? req.query.search : "";
     const page = Number(req.query.page || 1);
     const limit = Number(req.query.limit || 10);
 
@@ -123,5 +122,16 @@ export class BookingController {
       ),
     );
     return sendSuccess(res, result, "booking retrieved successfully", 201);
+  }
+
+  static async streamBookingStatus(req: Request, res: Response) {
+    const { bookingId } = req.params;
+    const userId = req.user.id;
+
+    await runService(() =>
+      bookingService.verifyBookingStreamAccess(bookingId, userId),
+    );
+
+    await subscribeBookingStream(bookingId, res);
   }
 }

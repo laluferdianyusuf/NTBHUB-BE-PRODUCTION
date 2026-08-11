@@ -28,7 +28,9 @@ export class PaymentServices {
         return invoice.entityId === userId;
 
       case "BOOKING": {
-        const booking = await bookingRepository.findBookingById(invoice.entityId);
+        const booking = await bookingRepository.findBookingById(
+          invoice.entityId,
+        );
         return booking?.userId === userId;
       }
 

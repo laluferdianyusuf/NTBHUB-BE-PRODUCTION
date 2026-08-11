@@ -5,6 +5,7 @@ import { BookingRepository } from "modules/booking/booking.repository";
 import { BookingService } from "modules/booking/booking.service";
 import { NotificationService } from "modules/notification/notification.service";
 import { addDelayedJob, cancelJob, createWorker } from "./index";
+import { publishBookingEvent } from "helpers/bookingEvents";
 
 const bookingRepository = new BookingRepository();
 const invoiceRepository = new InvoiceRepository();
@@ -36,44 +37,71 @@ createWorker(QUEUE_NAME, async (job: Job<InvoiceExpiryJobData>) => {
   const invoice = await invoiceRepository.findById(job.data.invoiceId);
   if (!invoice) return;
 
-  if (invoice.status !== "PAID") {
-    const expired = await invoiceRepository.markExpired(invoice.id);
-
-    const booking = await bookingRepository.findBookingById(expired.entityId);
-
-    if (!booking) return;
-
-    await bookingRepository.updateBookingStatus(booking.id, "EXPIRED");
-
-    publisher.publish(
-      "booking-events",
-      JSON.stringify({
-        event: "booking:sync",
-        payload: {
-          userId: booking.userId,
-          bookings: await bookingService.getBookingByUserId({
-            userId: booking.userId,
-            status: "all_book",
-          }),
-        },
-      }),
-    );
-
-    console.log(`[QUEUE] Invoice ${invoice.id} expired`);
+  if (invoice.status === "PAID") {
+    return;
   }
+
+  const expired = await invoiceRepository.markExpired(invoice.id);
+
+  const booking = await bookingRepository.findBookingById(expired.entityId);
+
+  if (!booking) {
+    return;
+  }
+
+  await bookingRepository.updateBookingStatus(booking.id, "EXPIRED");
+
+  publishBookingEvent({
+    bookingId: booking.id,
+    userId: booking.userId,
+    venueId: booking.venueId,
+    status: "EXPIRED",
+    timestamp: new Date().toISOString(),
+    message: "Booking kamu telah expired",
+  });
+
+  publisher.publish(
+    "booking-events",
+    JSON.stringify({
+      event: "booking:sync",
+      payload: {
+        userId: booking.userId,
+        bookings: await bookingService.getBookingByUserId({
+          userId: booking.userId,
+          status: "all_book",
+        }),
+      },
+    }),
+  );
+
+  console.log(`[QUEUE] Invoice ${invoice.id} expired`);
 });
 
 createWorker(START_QUEUE, async (job: Job<BookingJobData>) => {
   console.log("[QUEUE] START booking:", job.data.bookingId);
 
   const booking = await bookingRepository.findBookingById(job.data.bookingId);
-  if (!booking) return;
 
-  if (booking.status !== "PAID") return;
+  if (!booking) {
+    return;
+  }
+
+  if (booking.status !== "PAID") {
+    console.log("[QUEUE] Booking is not PAID:", booking.id, booking.status);
+
+    return;
+  }
 
   await bookingRepository.updateBookingStatus(booking.id, "ONGOING");
 
-  const service = getBookingService();
+  publishBookingEvent({
+    bookingId: booking.id,
+    userId: booking.userId,
+    venueId: booking.venueId,
+    status: "ONGOING",
+    timestamp: new Date().toISOString(),
+    message: "Booking kamu sudah dimulai",
+  });
 
   await notificationService.sendNotificationToRecipient({
     recipientType: "USER",
@@ -83,6 +111,8 @@ createWorker(START_QUEUE, async (job: Job<BookingJobData>) => {
     type: "BOOKING",
     entityId: booking.id,
   });
+
+  const service = getBookingService();
 
   publisher.publish(
     "booking-events",
@@ -105,13 +135,27 @@ createWorker(COMPLETE_QUEUE, async (job: Job<BookingJobData>) => {
   console.log("[QUEUE] COMPLETE booking:", job.data.bookingId);
 
   const booking = await bookingRepository.findBookingById(job.data.bookingId);
-  if (!booking) return;
 
-  if (booking.status !== "ONGOING") return;
+  if (!booking) {
+    return;
+  }
+
+  if (booking.status !== "ONGOING") {
+    console.log("[QUEUE] Booking is not ONGOING:", booking.id, booking.status);
+
+    return;
+  }
 
   await bookingRepository.updateBookingStatus(booking.id, "COMPLETED");
 
-  const service = getBookingService();
+  publishBookingEvent({
+    bookingId: booking.id,
+    userId: booking.userId,
+    venueId: booking.venueId,
+    status: "COMPLETED",
+    timestamp: new Date().toISOString(),
+    message: "Booking kamu telah selesai",
+  });
 
   await notificationService.sendNotificationToRecipient({
     recipientType: "USER",
@@ -121,6 +165,8 @@ createWorker(COMPLETE_QUEUE, async (job: Job<BookingJobData>) => {
     type: "BOOKING",
     entityId: booking.id,
   });
+
+  const service = getBookingService();
 
   publisher.publish(
     "booking-events",
@@ -140,26 +186,28 @@ createWorker(COMPLETE_QUEUE, async (job: Job<BookingJobData>) => {
 });
 
 export async function enqueueBookingStart(bookingId: string, startTime: Date) {
-  const startReminderAt = new Date(startTime.getTime() - 15 * 60 * 1000);
-  const delay = Math.max(0, startReminderAt.getTime() - Date.now());
+  const delay = Math.max(0, startTime.getTime() - Date.now());
 
   await addDelayedJob(
     START_QUEUE,
     "start-booking",
-    { bookingId },
+    {
+      bookingId,
+    },
     delay,
     `start-${bookingId}`,
   );
 }
 
 export async function enqueueBookingComplete(bookingId: string, endTime: Date) {
-  const endReminderAt = new Date(endTime.getTime() - 15 * 60 * 1000);
-  const delay = Math.max(0, endReminderAt.getTime() - Date.now());
+  const delay = Math.max(0, endTime.getTime() - Date.now());
 
   await addDelayedJob(
     COMPLETE_QUEUE,
     "complete-booking",
-    { bookingId },
+    {
+      bookingId,
+    },
     delay,
     `complete-${bookingId}`,
   );
@@ -171,9 +219,11 @@ export async function enqueueInvoiceExpiry(invoiceId: string, expiredAt: Date) {
   await addDelayedJob(
     QUEUE_NAME,
     JOB_NAME,
-    { invoiceId },
+    {
+      invoiceId,
+    },
     delay,
-    invoiceId, // jobId biar bisa cancel
+    invoiceId,
   );
 }
 
@@ -183,5 +233,6 @@ export async function cancelInvoiceExpiry(invoiceId: string) {
 
 export async function cancelBookingLifecycle(bookingId: string) {
   await cancelJob(START_QUEUE, `start-${bookingId}`);
+
   await cancelJob(COMPLETE_QUEUE, `complete-${bookingId}`);
 }

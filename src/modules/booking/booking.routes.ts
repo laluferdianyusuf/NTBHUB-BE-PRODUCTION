@@ -76,4 +76,11 @@ router.get(
   asyncHandler(BookingController.getVenueWithDetails),
 );
 
+router.get(
+  "/:bookingId/stream",
+  auth.authenticate,
+  auth.authorizeGlobalRole(["CUSTOMER"]),
+  asyncHandler(BookingController.streamBookingStatus),
+);
+
 export default router;

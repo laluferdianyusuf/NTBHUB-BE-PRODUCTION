@@ -32,6 +32,7 @@ import { BookingRepository } from "./booking.repository";
 import { NotificationService } from "modules/notification/notification.service";
 import { PromotionService } from "modules/promotion/promotion.service";
 import { UserService } from "modules/users/users.service";
+import { ForbiddenError, NotFoundError } from "shared/errors";
 
 const bookingRepository = new BookingRepository();
 const invoiceRepository = new InvoiceRepository();
@@ -251,143 +252,138 @@ export class BookingService {
         }
 
         const booking = await bookingRepository.createBooking(
-        {
-          userId: data.userId,
-          venueId: data.venueId,
-          serviceId: data.serviceId,
-          unitId: unit?.id ?? null,
-          startTime,
-          endTime,
-          totalPrice: bookingPrice,
-        },
-        tx,
-      );
-
-      let orderTotal = 0;
-      let discount = 0;
-
-      const orderItemsData: any[] = [];
-      const promotionInputItems: any[] = [];
-
-      if (data.orders?.length) {
-        const menuIds = data.orders.map((o) => o.menuId);
-        const menus = await menuRepository.findMenuByIds(menuIds);
-
-        const menuMap = new Map(menus.map((m) => [m.id, m]));
-
-        for (const item of data.orders) {
-          const menu = menuMap.get(item.menuId);
-          if (!menu) throw new Error("Menu not found");
-
-          const subtotal = Number(menu.price) * item.quantity;
-          orderTotal += subtotal;
-
-          orderItemsData.push({
-            menuId: menu.id,
-            quantity: item.quantity,
-            price: menu.price,
-            subtotal,
-          });
-
-          promotionInputItems.push({
-            menuId: menu.id,
-            quantity: item.quantity,
-            price: Number(menu.price),
-          });
-        }
-      }
-
-      const promotions = await this.promotionService.applyPromotions({
-        venueId: data.venueId,
-        userId: data.userId,
-        promoCode: data.promoCode,
-        items: promotionInputItems,
-        orderTotal,
-      });
-
-      const freeItems: any[] = [];
-
-      for (const promo of promotions) {
-        discount += promo.discountAmount;
-        freeItems.push(...promo.freeItems);
-      }
-
-      const finalOrderTotal = orderTotal - discount;
-
-      let order = null;
-
-      if (orderItemsData.length > 0 || freeItems.length > 0) {
-        order = await orderRepository.create(
           {
             userId: data.userId,
             venueId: data.venueId,
-            bookingId: booking.id,
-            total: new Prisma.Decimal(finalOrderTotal),
-            discount: new Prisma.Decimal(discount),
+            serviceId: data.serviceId,
+            unitId: unit?.id ?? null,
+            startTime,
+            endTime,
+            totalPrice: bookingPrice,
           },
           tx,
         );
 
-        const itemsToInsert = [
-          ...orderItemsData.map((i) => ({
-            orderId: order!.id,
-            menuId: i.menuId,
-            quantity: i.quantity,
-            subtotal: i.subtotal,
-          })),
-          ...freeItems.map((f) => ({
-            orderId: order!.id,
-            menuId: f.menuId,
-            quantity: f.quantity,
-            subtotal: 0,
-          })),
-        ];
+        let orderTotal = 0;
+        let discount = 0;
 
-        await orderItemRepository.createBulkOrders(itemsToInsert, tx);
+        const orderItemsData: any[] = [];
+        const promotionInputItems: any[] = [];
+
+        if (data.orders?.length) {
+          const menuIds = data.orders.map((o) => o.menuId);
+          const menus = await menuRepository.findMenuByIds(menuIds);
+
+          const menuMap = new Map(menus.map((m) => [m.id, m]));
+
+          for (const item of data.orders) {
+            const menu = menuMap.get(item.menuId);
+            if (!menu) throw new Error("Menu not found");
+
+            const subtotal = Number(menu.price) * item.quantity;
+            orderTotal += subtotal;
+
+            orderItemsData.push({
+              menuId: menu.id,
+              quantity: item.quantity,
+              price: menu.price,
+              subtotal,
+            });
+
+            promotionInputItems.push({
+              menuId: menu.id,
+              quantity: item.quantity,
+              price: Number(menu.price),
+            });
+          }
+        }
+
+        const promotions = await this.promotionService.applyPromotions({
+          venueId: data.venueId,
+          userId: data.userId,
+          promoCode: data.promoCode,
+          items: promotionInputItems,
+          orderTotal,
+        });
+
+        const freeItems: any[] = [];
 
         for (const promo of promotions) {
-          await this.promotionService.recordPromotionUsage(
-            promo.promotionId,
-            data.userId,
-            order.id,
-          );
+          discount += promo.discountAmount;
+          freeItems.push(...promo.freeItems);
         }
-      }
 
-      const invoiceTotal = bookingPrice + (finalOrderTotal ?? 0);
+        const finalOrderTotal = orderTotal - discount;
 
-      const invoice = await invoiceRepository.create(
-        {
-          entityType: "BOOKING",
-          entityId: booking.id,
-          invoiceNumber,
-          amount: invoiceTotal,
-          expiredAt: new Date(Date.now() + 5 * 60 * 1000),
-        },
-        tx,
-      );
+        let order = null;
 
-      await enqueueInvoiceExpiry(invoice.id, invoice.expiredAt!);
+        if (orderItemsData.length > 0 || freeItems.length > 0) {
+          order = await orderRepository.create(
+            {
+              userId: data.userId,
+              venueId: data.venueId,
+              bookingId: booking.id,
+              total: new Prisma.Decimal(finalOrderTotal),
+              discount: new Prisma.Decimal(discount),
+            },
+            tx,
+          );
 
-      return {
-        booking,
-        order,
-        invoice,
-        discount,
-        total: invoiceTotal,
-        expiredAt: invoice.expiredAt,
-      };
-    },
+          const itemsToInsert = [
+            ...orderItemsData.map((i) => ({
+              orderId: order!.id,
+              menuId: i.menuId,
+              quantity: i.quantity,
+              subtotal: i.subtotal,
+            })),
+            ...freeItems.map((f) => ({
+              orderId: order!.id,
+              menuId: f.menuId,
+              quantity: f.quantity,
+              subtotal: 0,
+            })),
+          ];
+
+          await orderItemRepository.createBulkOrders(itemsToInsert, tx);
+
+          for (const promo of promotions) {
+            await this.promotionService.recordPromotionUsage(
+              promo.promotionId,
+              data.userId,
+              order.id,
+            );
+          }
+        }
+
+        const invoiceTotal = bookingPrice + (finalOrderTotal ?? 0);
+
+        const invoice = await invoiceRepository.create(
+          {
+            entityType: "BOOKING",
+            entityId: booking.id,
+            invoiceNumber,
+            amount: invoiceTotal,
+            expiredAt: new Date(Date.now() + 5 * 60 * 1000),
+          },
+          tx,
+        );
+
+        await enqueueInvoiceExpiry(invoice.id, invoice.expiredAt!);
+
+        return {
+          booking,
+          order,
+          invoice,
+          discount,
+          total: invoiceTotal,
+          expiredAt: invoice.expiredAt,
+        };
+      },
       {
         isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
       },
     );
 
-    /**
-     * =========================
-     * 11. NOTIFICATIONS + EVENTS
-     * =========================
-     */
     await notificationService.sendToVenueOwner(
       data.venueId,
       "New Booking Is Pending",
@@ -1023,5 +1019,19 @@ export class BookingService {
     );
 
     return existing;
+  }
+
+  async verifyBookingStreamAccess(bookingId: string, userId: string) {
+    const booking = await bookingRepository.findBookingById(bookingId);
+
+    if (!booking) {
+      throw new NotFoundError("Booking not found");
+    }
+
+    if (booking.userId !== userId) {
+      throw new ForbiddenError();
+    }
+
+    return booking;
   }
 }
