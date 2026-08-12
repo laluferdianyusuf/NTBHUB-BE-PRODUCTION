@@ -25,8 +25,12 @@ export class ReviewPublicPlaceServices {
 
     let imageUrl: string | null = null;
 
-    if (file && file.path) {
-      const image = await uploadImage({ file, folder: "place_reviews" });
+    if (file) {
+      const image = await uploadImage({
+        file,
+        folder: "place_reviews",
+      });
+
       imageUrl = image.url;
     }
 
