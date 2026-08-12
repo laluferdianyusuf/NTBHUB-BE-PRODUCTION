@@ -18,6 +18,9 @@ import { uploadImage } from "utils/uploadS3";
 import { UserRepository } from "./users.repository";
 
 import { prisma } from "config/prisma";
+import { DeviceService } from "modules/device/device.service";
+import { LoginSessionRepository } from "modules/login-session/login-session.repository";
+import { LoginSessionService } from "modules/login-session/login-session.services";
 const redis = new Redis();
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -30,22 +33,38 @@ const invitationServices = new InvitationServices();
 const venueRepository = new VenueRepository();
 const accountService = new AccountService();
 const rateLimiter = new RateLimiterService();
+const loginSessionService = new LoginSessionService();
+const loginSessionRepository = new LoginSessionRepository();
+const deviceService = new DeviceService();
 
 export class UserService {
-  private async generateTokens(userId: string) {
-    const accessToken = jwt.sign({ sub: userId }, process.env.ACCESS_SECRET!, {
-      expiresIn: "15m",
-    });
-
-    const refreshToken = jwt.sign(
-      { sub: userId },
-      process.env.REFRESH_SECRET!,
-      { expiresIn: "7d" },
+  private async generateTokens(userId: string, sessionId: string) {
+    const accessToken = jwt.sign(
+      {
+        sub: userId,
+        sessionId,
+      },
+      process.env.ACCESS_SECRET!,
+      {
+        expiresIn: "15m",
+      },
     );
 
-    await redis.set(`refresh:${userId}`, refreshToken, "EX", 7 * 86400);
+    const refreshToken = jwt.sign(
+      {
+        sub: userId,
+        sessionId,
+      },
+      process.env.REFRESH_SECRET!,
+      {
+        expiresIn: "7d",
+      },
+    );
 
-    return { accessToken, refreshToken };
+    return {
+      accessToken,
+      refreshToken,
+    };
   }
 
   async register(data: {
@@ -370,14 +389,63 @@ export class UserService {
     };
   }
 
-  async login(email: string, password: string) {
+  async login(
+    email: string,
+    password: string,
+    deviceData: {
+      deviceId: string;
+      token?: string;
+      expoToken?: string;
+      platform?: string;
+      osName?: string;
+      osVersion?: string;
+      deviceModel?: string;
+      buildId?: string;
+    },
+    meta?: {
+      ipAddress?: string;
+      userAgent?: string;
+    },
+  ) {
     const user = await userRepository.findByEmail(email);
     if (!user) throw new Error("User not found");
 
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) throw new Error("Invalid password");
 
-    const tokens = await this.generateTokens(user.id);
+    const device = await deviceService.registerDevice({
+      userId: user.id,
+
+      deviceId: deviceData.deviceId,
+
+      token: deviceData.token ?? "",
+      expoToken: deviceData.expoToken ?? "",
+
+      platform: deviceData.platform,
+      osName: deviceData.osName,
+      osVersion: deviceData.osVersion,
+      deviceModel: deviceData.deviceModel,
+      buildId: deviceData.buildId,
+    });
+
+    const session = await loginSessionService.createSession({
+      userId: user.id,
+      deviceId: device.data.id,
+
+      ipAddress: meta?.ipAddress,
+      userAgent: meta?.userAgent,
+
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    });
+
+    const tokens = await this.generateTokens(user.id, session.id);
+
+    const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, 10);
+
+    await loginSessionRepository.updateRefreshTokenHash(
+      session.id,
+      refreshTokenHash,
+    );
 
     await redis.set(
       `user:${user.id}`,
@@ -397,20 +465,48 @@ export class UserService {
         email: user.email,
         isVerified: user.isVerified,
       },
+      session: {
+        id: session.id,
+        deviceId: device.data.id,
+        loginAt: session.loginAt,
+      },
       ...tokens,
     };
   }
 
-  async googleLogin(idToken: string) {
+  async googleLogin(
+    idToken: string,
+    deviceData: {
+      deviceId: string;
+      token?: string;
+      expoToken?: string;
+      platform?: string;
+      osName?: string;
+      osVersion?: string;
+      deviceModel?: string;
+      buildId?: string;
+    },
+    meta?: {
+      ipAddress?: string;
+      userAgent?: string;
+    },
+  ) {
     const ticket = await client.verifyIdToken({
       idToken,
       audience: process.env.GOOGLE_CLIENT_ID,
     });
 
     const payload = ticket.getPayload();
-    if (!payload) throw new Error("Invalid google token");
 
-    const { email, name, picture, sub } = payload;
+    if (!payload) {
+      throw new Error("Invalid google token");
+    }
+
+    const { email, name, picture, sub: googleId } = payload;
+
+    if (!email) {
+      throw new Error("Google account email is not available");
+    }
 
     let user = await userRepository.findByEmail(String(email));
 
@@ -419,13 +515,21 @@ export class UserService {
         const newUser = await userRepository.create(
           {
             email: String(email),
+
             name: name || "Google User",
-            username: name || "Google User",
+
+            username: name || `google_${googleId.slice(0, 8)}`,
+
             password: "",
-            photo: picture,
-            googleId: sub,
+
+            photo: picture || null,
+
+            googleId,
+
             isVerified: true,
+
             emailVerifyToken: null,
+
             emailVerifyExpiry: null,
           },
           tx,
@@ -461,7 +565,63 @@ export class UserService {
 
         return newUser;
       });
+    } else {
+      if (!user.googleId) {
+        user = await userRepository.update(user.id, {
+          googleId,
+          isVerified: true,
+        });
+      }
     }
+
+    if (!user.isVerified) {
+      throw new Error("User not verified");
+    }
+
+    if (!deviceData?.deviceId) {
+      throw new Error("Device ID is required");
+    }
+
+    const device = await deviceService.registerDevice({
+      userId: user.id,
+
+      deviceId: deviceData.deviceId,
+
+      token: deviceData.token ?? "",
+
+      expoToken: deviceData.expoToken ?? "",
+
+      platform: deviceData.platform,
+
+      osName: deviceData.osName,
+
+      osVersion: deviceData.osVersion,
+
+      deviceModel: deviceData.deviceModel,
+
+      buildId: deviceData.buildId,
+    });
+
+    const session = await loginSessionService.createSession({
+      userId: user.id,
+
+      deviceId: device.data.id,
+
+      ipAddress: meta?.ipAddress,
+
+      userAgent: meta?.userAgent,
+
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    });
+
+    const tokens = await this.generateTokens(user.id, session.id);
+
+    const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, 10);
+
+    await loginSessionRepository.updateRefreshTokenHash(
+      session.id,
+      refreshTokenHash,
+    );
 
     await redis.set(
       `user:${user.id}`,
@@ -473,32 +633,91 @@ export class UserService {
       3600,
     );
 
-    const tokens = await this.generateTokens(user.id);
-
     return {
       user: {
         id: user.id,
         name: user.name,
         username: user.username,
         email: user.email,
+        isVerified: user.isVerified,
       },
+
+      session: {
+        id: session.id,
+        deviceId: device.data.id,
+        loginAt: session.loginAt,
+      },
+
       ...tokens,
     };
   }
 
   async refresh(refreshToken: string) {
-    if (!refreshToken) throw new Error("Missing refresh token");
+    if (!refreshToken) {
+      throw new Error("Missing refresh token");
+    }
 
-    const decoded = jwt.verify(
-      refreshToken,
-      process.env.REFRESH_SECRET!,
-    ) as any;
+    let decoded: {
+      sub: string;
+      sessionId: string;
+    };
 
-    const stored = await redis.get(`refresh:${decoded.sub}`);
-    if (!stored || stored !== refreshToken)
+    try {
+      decoded = jwt.verify(refreshToken, process.env.REFRESH_SECRET!) as {
+        sub: string;
+        sessionId: string;
+      };
+    } catch {
       throw new Error("Invalid refresh token");
+    }
 
-    return this.generateTokens(decoded.sub);
+    if (!decoded.sub || !decoded.sessionId) {
+      throw new Error("Invalid refresh token");
+    }
+
+    const session = await loginSessionService.getSessionById(
+      decoded.sessionId,
+      decoded.sub,
+    );
+
+    if (!session) {
+      throw new Error("Login session not found");
+    }
+
+    if (session.logoutAt) {
+      throw new Error("Session has been logged out");
+    }
+
+    if (session.revokedAt) {
+      throw new Error("Session has been revoked");
+    }
+
+    if (session.expiresAt && session.expiresAt <= new Date()) {
+      throw new Error("Login session expired");
+    }
+
+    if (!session.refreshTokenHash) {
+      throw new Error("Refresh token not found");
+    }
+
+    const valid = await bcrypt.compare(refreshToken, session.refreshTokenHash);
+
+    if (!valid) {
+      throw new Error("Invalid refresh token");
+    }
+
+    const tokens = await this.generateTokens(decoded.sub, decoded.sessionId);
+
+    const newRefreshTokenHash = await bcrypt.hash(tokens.refreshToken, 10);
+
+    await loginSessionRepository.updateRefreshTokenHash(
+      decoded.sessionId,
+      newRefreshTokenHash,
+    );
+
+    await loginSessionService.updateLastActive(decoded.sessionId, decoded.sub);
+
+    return tokens;
   }
 
   async getCurrentUser(userId: string) {

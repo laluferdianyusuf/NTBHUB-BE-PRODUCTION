@@ -26,6 +26,7 @@ import {
   invoiceRouter,
   ledgerRouter,
   locationRouter,
+  loginSessionRouter,
   logsRouter,
   mapsRouter,
   menuRouter,
@@ -57,8 +58,8 @@ import {
   wellKnownRouter,
   withdrawRouter,
 } from "modules";
-import { createV1RouteRegistry, mountRoutes } from "./registry";
 import { deprecatedRouters } from "./deprecated";
+import { createV1RouteRegistry, mountRoutes } from "./registry";
 
 const router = Router();
 const v1 = Router();
@@ -79,6 +80,7 @@ mountRoutes(
     invitation: invitationRouter,
     location: locationRouter,
     logs: logsRouter,
+    loginSession: loginSessionRouter,
     menu: menuRouter,
     news: newsRouter,
     notification: notificationRouter,

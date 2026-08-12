@@ -405,6 +405,7 @@ model User {
   ownedEvents               Event[]                    @relation("EventOwner")
   events                    Event[]                    @relation("EventUser")
   userInterests             UserInterest[]
+  loginSessions             LoginSession[]
 
   @@index([email])
   @@index([phone])
@@ -532,18 +533,48 @@ model Device {
   buildId      String?
   osVersion    String?
   deviceModel  String?
-  deviceId    String?
+  deviceId     String?
   isOnline     Boolean   @default(false)
   lastActiveAt DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  user    User?   @relation(fields: [userId], references: [id])
-  venue   Venue?  @relation(fields: [venueId], references: [id])
-  venueId String?
+  user          User?          @relation(fields: [userId], references: [id])
+  venue         Venue?         @relation(fields: [venueId], references: [id])
+  venueId       String?
+  loginSessions LoginSession[]
 
-@@unique([userId, deviceId]) 
+  @@unique([userId, deviceId])
   @@index([token])
+}
+
+model LoginSession {
+  id String @id @default(uuid())
+
+  userId   String
+  deviceId String
+
+  ipAddress String?
+  userAgent String?
+
+refreshTokenHash String?
+  loginAt      DateTime  @default(now())
+  lastActiveAt DateTime  @default(now())
+  logoutAt     DateTime?
+  revokedAt    DateTime?
+  expiresAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([deviceId])
+  @@index([userId, loginAt])
+  @@index([userId, logoutAt])
+  @@index([expiresAt])
 }
 
 model LocationTracking {
@@ -887,7 +918,7 @@ model Promotion {
   promotionClicks      PromotionClick[]
 
   @@index([venueId])
-@@index([userId])
+  @@index([userId])
 }
 
 model PromotionItem {
@@ -947,10 +978,10 @@ model Order {
   discount Decimal           @default(0)
   status   TransactionStatus @default(PENDING)
 
-  requiresDelivery  Boolean @default(false)
-  dropoffAddress    String?
-  dropoffLatitude   Float?
-  dropoffLongitude  Float?
+  requiresDelivery Boolean @default(false)
+  dropoffAddress   String?
+  dropoffLatitude  Float?
+  dropoffLongitude Float?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

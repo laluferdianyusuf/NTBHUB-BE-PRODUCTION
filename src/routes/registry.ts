@@ -26,6 +26,7 @@ export const createV1RouteRegistry = (routes: {
   invoice: Router;
   location: Router;
   logs: Router;
+  loginSession: Router;
   menu: Router;
   news: Router;
   notification: Router;
@@ -75,6 +76,7 @@ export const createV1RouteRegistry = (routes: {
 }): RouteMount[] => [
   { group: "core", path: "/auth", router: routes.auth },
   { group: "core", path: "/users", router: routes.users },
+  { group: "core", path: "/login-session", router: routes.loginSession },
   { group: "core", path: "/profiles", router: routes.profiles },
   { group: "core", path: "/search", router: routes.search },
   { group: "core", path: "/logs", router: routes.logs },
@@ -94,7 +96,11 @@ export const createV1RouteRegistry = (routes: {
   { group: "venue", path: "/venue-balance", router: routes.venueBalance },
   { group: "venue", path: "/venue-category", router: routes.venueCategory },
   { group: "venue", path: "/venue-service", router: routes.venueService },
-  { group: "venue", path: "/venue-sub-category", router: routes.venueSubCategory },
+  {
+    group: "venue",
+    path: "/venue-sub-category",
+    router: routes.venueSubCategory,
+  },
   { group: "venue", path: "/venue-unit", router: routes.venueUnit },
   { group: "venue", path: "/venue-staff", router: routes.venueStaff },
   { group: "venue", path: "/menus", router: routes.menu },
@@ -111,13 +117,41 @@ export const createV1RouteRegistry = (routes: {
   { group: "event", path: "/attendances", router: routes.attendances },
 
   { group: "community", path: "/communities", router: routes.communities },
-  { group: "community", path: "/community-members", router: routes.communityMembers },
-  { group: "community", path: "/community-posts", router: routes.communityPosts },
-  { group: "community", path: "/community-reactions", router: routes.communityReactions },
-  { group: "community", path: "/community-events", router: routes.communityEvents },
-  { group: "community", path: "/community-event-orders", router: routes.communityEventOrders },
-  { group: "community", path: "/community-twibbons", router: routes.communityTwibbons },
-  { group: "community", path: "/community-attendances", router: routes.communityAttendances },
+  {
+    group: "community",
+    path: "/community-members",
+    router: routes.communityMembers,
+  },
+  {
+    group: "community",
+    path: "/community-posts",
+    router: routes.communityPosts,
+  },
+  {
+    group: "community",
+    path: "/community-reactions",
+    router: routes.communityReactions,
+  },
+  {
+    group: "community",
+    path: "/community-events",
+    router: routes.communityEvents,
+  },
+  {
+    group: "community",
+    path: "/community-event-orders",
+    router: routes.communityEventOrders,
+  },
+  {
+    group: "community",
+    path: "/community-twibbons",
+    router: routes.communityTwibbons,
+  },
+  {
+    group: "community",
+    path: "/community-attendances",
+    router: routes.communityAttendances,
+  },
   { group: "community", path: "/comments", router: routes.comments },
 
   { group: "finance", path: "/finance", router: routes.finance },

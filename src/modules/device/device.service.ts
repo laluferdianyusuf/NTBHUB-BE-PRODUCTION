@@ -37,9 +37,8 @@ export class DeviceService {
           deviceModel: data.deviceModel,
           deviceId: data.deviceId,
           buildId: data.buildId,
-          lastActiveAt: new Date(),
+          lastActiveAt: new Date().toISOString(),
         } as any);
-
         return success.success201("User device registered", device);
       }
     } catch (err) {

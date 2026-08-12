@@ -4,6 +4,18 @@ import { z } from "zod";
 export const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
+
+  deviceId: z.string().min(1, "Device ID is required"),
+
+  token: z.string().optional(),
+  expoToken: z.string().optional(),
+
+  platform: z.enum(["android", "ios"]).optional(),
+
+  osName: z.string().optional(),
+  osVersion: z.string().optional(),
+  deviceModel: z.string().optional(),
+  buildId: z.string().optional(),
 });
 
 export const registerSchema = z.object({
@@ -29,6 +41,17 @@ export const resendVerificationSchema = z.object({
 
 export const googleLoginSchema = z.object({
   idToken: z.string().min(1),
+
+  deviceId: z.string().min(1, "Device ID is required"),
+
+  token: z.string().optional(),
+  expoToken: z.string().optional(),
+
+  platform: z.enum(["android", "ios"]).optional(),
+  osName: z.string().optional(),
+  osVersion: z.string().optional(),
+  deviceModel: z.string().optional(),
+  buildId: z.string().optional(),
 });
 
 export const setPinSchema = z.object({

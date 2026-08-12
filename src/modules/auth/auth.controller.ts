@@ -1,13 +1,9 @@
 import { Request, Response } from "express";
 import { getClientIp } from "helpers/getClientIp";
 import { UserService } from "modules/users/users.service";
-import {
-  ForbiddenError,
-  UnauthorizedError,
-  ValidationError,
-} from "shared/errors";
-import { runService } from "shared/http/serviceError";
+import { ForbiddenError, UnauthorizedError } from "shared/errors";
 import { sendSuccess } from "shared/http/response";
+import { runService } from "shared/http/serviceError";
 
 const userService = new UserService();
 
@@ -73,16 +69,78 @@ export class AuthController {
   }
 
   static async login(req: Request, res: Response) {
+    const {
+      email,
+      password,
+
+      deviceId,
+      token,
+      expoToken,
+      platform,
+      osName,
+      osVersion,
+      deviceModel,
+      buildId,
+    } = req.body;
+
     const result = await runService(() =>
-      userService.login(req.body.email, req.body.password),
+      userService.login(
+        email,
+        password,
+        {
+          deviceId,
+          token,
+          expoToken,
+          platform,
+          osName,
+          osVersion,
+          deviceModel,
+          buildId,
+        },
+        {
+          ipAddress: req.ip,
+          userAgent: req.get("user-agent"),
+        },
+      ),
     );
+
     return sendSuccess(res, result, "Login successful");
   }
 
   static async googleLogin(req: Request, res: Response) {
+    const {
+      idToken,
+
+      deviceId,
+      token,
+      expoToken,
+      platform,
+      osName,
+      osVersion,
+      deviceModel,
+      buildId,
+    } = req.body;
+
     const result = await runService(() =>
-      userService.googleLogin(req.body.idToken),
+      userService.googleLogin(
+        idToken,
+        {
+          deviceId,
+          token,
+          expoToken,
+          platform,
+          osName,
+          osVersion,
+          deviceModel,
+          buildId,
+        },
+        {
+          ipAddress: req.ip,
+          userAgent: req.get("user-agent"),
+        },
+      ),
     );
+
     return sendSuccess(res, result, "Google login successful");
   }
 
