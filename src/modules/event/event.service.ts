@@ -98,6 +98,7 @@ export class EventService {
       updatedAt: event.updatedAt,
       tickets: event.ticketTypes,
       ownerId: event.ownerId,
+      isActive: event.isActive,
     }));
 
     return {

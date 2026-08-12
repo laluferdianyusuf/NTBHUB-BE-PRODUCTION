@@ -14,6 +14,49 @@ export class CommunityEventService {
     return this.repo.findByCommunity(communityId, { skip, take: limit });
   }
 
+  async getAllEvents(params: {
+    search?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const { search, page = 1, limit = 10 } = params;
+
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await Promise.all([
+      this.repo.findCommunityEvents({
+        search,
+        skip,
+        take: limit,
+      }),
+      this.repo.countEvents({ search }),
+    ]);
+
+    const shapedData = data.map((event) => ({
+      id: event.id,
+      name: event.title,
+      status: event.status,
+      location: event.location,
+      description: event.description,
+      image: event.image,
+      startAt: event.startAt,
+      endAt: event.endAt,
+      updatedAt: event.updatedAt,
+      createdBy: event.createdBy,
+      isActive: event.isPublic,
+    }));
+
+    return {
+      data: shapedData,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
   async createEvent(
     communityId: string,
     createdById: string,

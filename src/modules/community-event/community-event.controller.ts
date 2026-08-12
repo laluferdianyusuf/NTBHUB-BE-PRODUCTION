@@ -74,6 +74,21 @@ export class CommunityEventController {
     return sendSuccess(res, events, "Events retrieved");
   };
 
+  static async listEvent(req: Request, res: Response) {
+    const { search, page, limit } = req.query;
+
+    const result = await runService(() =>
+      service.getAllEvents({
+        search: typeof search === "string" ? search : undefined,
+
+        page: Number(page) > 0 ? Number(page) : 1,
+        limit: Number(limit) > 0 ? Number(limit) : 20,
+      }),
+    );
+
+    return sendSuccess(res, result, "Event retrieved successfully");
+  }
+
   static detail = async (req: Request, res: Response) => {
     const { eventId } = req.params;
     const data = await runService(() => service.getEventDetail(eventId));

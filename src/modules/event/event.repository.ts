@@ -199,9 +199,7 @@ export class EventRepository {
     take?: number;
   }) {
     const { status = "all", search, skip = 0, take = 10 } = params;
-    const where: any = {
-      isActive: true,
-    };
+    const where: any = {};
 
     if (search) {
       const words = search.split(" ");

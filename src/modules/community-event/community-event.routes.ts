@@ -13,7 +13,16 @@ const eventController = new CommunityEventController();
 const eventTicketController = new CommunityEventTicketController();
 const eventTicketTypeController = new CommunityEventTicketTypeController();
 
-router.get("/list/:communityId", auth.authenticate, asyncHandler(CommunityEventController.listByCommunity),
+router.get(
+  "/list/:communityId",
+  auth.authenticate,
+  asyncHandler(CommunityEventController.listByCommunity),
+);
+
+router.get(
+  "/list-events/:communityId",
+  auth.authenticate,
+  asyncHandler(CommunityEventController.listEvent),
 );
 
 router.post(
@@ -23,17 +32,29 @@ router.post(
   asyncHandler(CommunityEventController.create),
 );
 
-router.post("/create-collaboration", auth.authenticate, asyncHandler(CommunityEventController.addCollaboration),
+router.post(
+  "/create-collaboration",
+  auth.authenticate,
+  asyncHandler(CommunityEventController.addCollaboration),
 );
 
-router.get("/detail/:eventId", auth.authenticate, asyncHandler(CommunityEventController.detail),
+router.get(
+  "/detail/:eventId",
+  auth.authenticate,
+  asyncHandler(CommunityEventController.detail),
 );
 
-router.get("/event/dashboard/:eventId", auth.authenticate, asyncHandler(CommunityEventController.getCommunityEventDashboard),
+router.get(
+  "/event/dashboard/:eventId",
+  auth.authenticate,
+  asyncHandler(CommunityEventController.getCommunityEventDashboard),
 );
 
 // event scan qr code
-router.post("/scan-community-qrCode", auth.authenticate, asyncHandler(CommunityEventOrderController.scanQrCode),
+router.post(
+  "/scan-community-qrCode",
+  auth.authenticate,
+  asyncHandler(CommunityEventOrderController.scanQrCode),
 );
 
 // event ticket DETAIL
@@ -65,7 +86,9 @@ router.post(
   asyncHandler(CommunityEventTicketTypeController.createTicketType),
 );
 
-router.get("/ticket/type/event/:communityEventId", asyncHandler(CommunityEventTicketTypeController.findAllTicketTypes),
+router.get(
+  "/ticket/type/event/:communityEventId",
+  asyncHandler(CommunityEventTicketTypeController.findAllTicketTypes),
 );
 
 // event order
@@ -77,16 +100,28 @@ router.get("/ticket/type/event/:communityEventId", asyncHandler(CommunityEventTi
 //   eventOrderController.handlePaymentSuccess(req, res),
 // );
 
-router.post("/order/checkout-pay", auth.authenticate, asyncHandler(CommunityEventOrderController.checkoutAndPay),
+router.post(
+  "/order/checkout-pay",
+  auth.authenticate,
+  asyncHandler(CommunityEventOrderController.checkoutAndPay),
 );
 
-router.get("/detail-order/:id", auth.authenticate, asyncHandler(CommunityEventOrderController.getDetail),
+router.get(
+  "/detail-order/:id",
+  auth.authenticate,
+  asyncHandler(CommunityEventOrderController.getDetail),
 );
 
-router.get("/orders", auth.authenticate, asyncHandler(CommunityEventOrderController.getEventOrders),
+router.get(
+  "/orders",
+  auth.authenticate,
+  asyncHandler(CommunityEventOrderController.getEventOrders),
 );
 
-router.post("/scan-qrCode", auth.authenticate, asyncHandler(CommunityEventOrderController.scanQrCode),
+router.post(
+  "/scan-qrCode",
+  auth.authenticate,
+  asyncHandler(CommunityEventOrderController.scanQrCode),
 );
 
 export default router;

@@ -44,6 +44,30 @@ export class CommunityEventRepository {
     });
   }
 
+  async countEvents(params: Omit<{ search?: string }, "skip" | "take"> = {}) {
+    const { search } = params;
+
+    const where: any = {};
+
+    if (search) {
+      const words = search.split(" ");
+
+      where.OR = [
+        ...words.map((word) => ({
+          name: { contains: word, mode: "insensitive" },
+        })),
+        ...words.map((word) => ({
+          location: { contains: word, mode: "insensitive" },
+        })),
+        ...words.map((word) => ({
+          description: { contains: word, mode: "insensitive" },
+        })),
+      ];
+    }
+
+    return prisma.communityEvent.count({ where });
+  }
+
   async getCommunityEventDashboard(eventId: string) {
     const now = new Date();
 
