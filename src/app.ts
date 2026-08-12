@@ -1,16 +1,13 @@
-import express from "express";
 import cors from "cors";
+import express from "express";
 import http from "http";
 import { swaggerSpec, swaggerUiMiddleware } from "./config/swagger";
 
-import router from "./routes/index";
 import { startExpireJob } from "cron/expireJob";
+import { errorHandler, notFoundHandler } from "middlewares/error.middleware";
 import { initSocket } from "socket";
-import {
-  errorHandler,
-  notFoundHandler,
-} from "middlewares/error.middleware";
 import { requestLogger } from "utils/logger";
+import router from "./routes/index";
 
 export type AppOptions = {
   enableSocket?: boolean;
@@ -36,7 +33,7 @@ export const createApp = (options: AppOptions = {}) => {
     app.use(requestLogger);
   }
 
-  const server = enableSocket ? http.createServer(app) : undefined;
+  const server = http.createServer(app);
 
   if (enableSocket && server) {
     initSocket(server);

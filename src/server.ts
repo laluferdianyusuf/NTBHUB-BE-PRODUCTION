@@ -1,15 +1,12 @@
+import "queue/courier-worker";
+import { server } from "./app";
 import "./config/env";
 import { env } from "./config/env";
-import { app, server } from "./app";
-import "queue/courier-worker";
 
-app.listen(env.PORT, () => {
+server.listen(env.PORT, "0.0.0.0", () => {
   console.log(`Server running on http://localhost:${env.PORT}`);
-  console.log(`Swagger running on http://localhost:${env.PORT}/api-docs`);
-});
 
-server.listen(env.SOCKET_PORT, () => {
-  console.log(
-    `Server with Socket.IO running on http://localhost:${env.SOCKET_PORT}`,
-  );
+  console.log(`Swagger running on http://localhost:${env.PORT}/api-docs`);
+
+  console.log(`Socket.IO running on http://localhost:${env.PORT}/socket.io`);
 });

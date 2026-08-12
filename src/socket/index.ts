@@ -1,5 +1,5 @@
-import { Server } from "socket.io";
 import { setupRedisSubscriber } from "events/redis.subscriber";
+import { Server } from "socket.io";
 import { socketAuth } from "./auth";
 import { registerLocationSocket } from "./location.socket";
 import { registerPresenceSocket } from "./presence.socket";
@@ -11,7 +11,8 @@ export const initSocket = (httpServer: any) => {
       origin: "*",
       methods: ["GET", "POST"],
     },
-    transports: ["websocket"],
+
+    transports: ["polling", "websocket"],
   });
 
   io.use(socketAuth);
@@ -21,10 +22,15 @@ export const initSocket = (httpServer: any) => {
   });
 
   io.on("connection", (socket) => {
-    console.log("SOCKET CONNECTED:", (socket as any).user.sub);
+    console.log("SOCKET CONNECTED:", (socket as any).user.sub, socket.id);
+
     registerUserSocket(io, socket);
     registerPresenceSocket(io, socket);
     registerLocationSocket(io, socket);
+
+    socket.on("disconnect", (reason) => {
+      console.log("SOCKET DISCONNECTED:", socket.id, reason);
+    });
   });
 
   return io;
