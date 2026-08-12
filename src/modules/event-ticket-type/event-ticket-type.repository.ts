@@ -21,6 +21,14 @@ export class EventTicketTypeRepository {
     });
   }
 
+  async findAll(eventId: string, tx?: Prisma.TransactionClient) {
+    const db = tx ?? prisma;
+    return db.eventTicketType.findMany({
+      where: { eventId },
+      orderBy: { price: "asc" },
+    });
+  }
+
   async findById(tx: Prisma.TransactionClient | undefined, id: string) {
     const db = tx ?? prisma;
     return db.eventTicketType.findUnique({ where: { id } });

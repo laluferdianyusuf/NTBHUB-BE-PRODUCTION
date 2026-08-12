@@ -20,6 +20,10 @@ export class EventTicketTypeService {
     return this.repo.findByEvent(eventId);
   }
 
+  async getAll(eventId: string) {
+    return this.repo.findAll(eventId);
+  }
+
   async updateTicketType(
     id: string,
     data: {

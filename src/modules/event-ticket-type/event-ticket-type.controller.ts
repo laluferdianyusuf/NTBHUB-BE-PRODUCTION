@@ -21,9 +21,17 @@ export class EventTicketTypeController {
     return sendSuccess(res, data, "Ticket types retrieved");
   }
 
+  static async getAll(req: Request, res: Response) {
+    const { eventId } = req.params;
+    const data = await runService(() => service.getAll(eventId));
+    return sendSuccess(res, data, "Ticket types retrieved");
+  }
+
   static async update(req: Request, res: Response) {
     const { id } = req.params;
-    const updated = await runService(() => service.updateTicketType(id, req.body));
+    const updated = await runService(() =>
+      service.updateTicketType(id, req.body),
+    );
     return sendSuccess(res, updated, "Ticket type updated");
   }
 
