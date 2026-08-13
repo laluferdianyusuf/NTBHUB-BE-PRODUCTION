@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { runService } from "shared/http/serviceError";
 import { sendSuccess } from "shared/http/response";
 import { CourierService } from "modules/courier/courier.service";
+import { subscribeDeliveryStream } from "services/delivery.sse.service";
 
 const courierService = new CourierService();
 
@@ -112,5 +113,16 @@ export class CourierController {
       courierService.assignDelivery(req.params.deliveryId),
     );
     return sendSuccess(res, result, "Driver assigned");
+  }
+
+  static async streamDelivery(req: Request, res: Response) {
+    const userId = req.user!.id;
+    const { deliveryId } = req.params;
+
+    await runService(() =>
+      courierService.verifyDeliveryStreamAccess(deliveryId, userId),
+    );
+
+    await subscribeDeliveryStream(deliveryId, res);
   }
 }

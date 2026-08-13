@@ -10,7 +10,7 @@ const sseSubscriber = new Redis({
   maxRetriesPerRequest: null,
 });
 
-let subscriberReady = false;
+let subscriberPromise: Promise<void> | null = null;
 
 const TERMINAL_EVENTS = new Set([
   "payment:completed",
@@ -18,30 +18,35 @@ const TERMINAL_EVENTS = new Set([
   "payment:expired",
 ]);
 
-async function ensureSubscriber() {
-  if (subscriberReady) return;
+function ensureSubscriber() {
+  if (subscriberPromise) {
+    return subscriberPromise;
+  }
 
+  subscriberPromise = initializeSubscriber();
+
+  return subscriberPromise;
+}
+
+async function initializeSubscriber() {
   await sseSubscriber.subscribe(PAYMENT_SSE_CHANNEL);
 
   sseSubscriber.on("message", (channel, message) => {
-    if (channel !== PAYMENT_SSE_CHANNEL) return;
+    if (channel !== PAYMENT_SSE_CHANNEL) {
+      return;
+    }
 
     try {
       const { paymentId, event, payload } = JSON.parse(message);
+
       deliverToClients(paymentId, event, payload);
-    } catch (err) {
-      console.error("[SSE] Failed to process message:", err);
+    } catch (error) {
+      console.error("[SSE] Failed to process message:", error);
     }
   });
-
-  subscriberReady = true;
 }
 
-function deliverToClients(
-  paymentId: string,
-  event: string,
-  payload: unknown,
-) {
+function deliverToClients(paymentId: string, event: string, payload: unknown) {
   const connections = clients.get(paymentId);
   if (!connections?.size) return;
 
@@ -77,10 +82,7 @@ function removeClient(paymentId: string, res: Response) {
   }
 }
 
-export async function subscribePaymentStream(
-  paymentId: string,
-  res: Response,
-) {
+export async function subscribePaymentStream(paymentId: string, res: Response) {
   await ensureSubscriber();
 
   res.setHeader("Content-Type", "text/event-stream");
@@ -91,9 +93,7 @@ export async function subscribePaymentStream(
 
   addClient(paymentId, res);
 
-  res.write(
-    `event: connected\ndata: ${JSON.stringify({ paymentId })}\n\n`,
-  );
+  res.write(`event: connected\ndata: ${JSON.stringify({ paymentId })}\n\n`);
 
   const heartbeat = setInterval(() => {
     res.write(": keepalive\n\n");

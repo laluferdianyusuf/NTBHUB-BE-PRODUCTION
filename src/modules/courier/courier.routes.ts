@@ -100,4 +100,10 @@ router.post(
   asyncHandler(CourierController.assignDelivery),
 );
 
+router.get(
+  "/:deliveryId/stream",
+  auth.authenticate,
+  asyncHandler(CourierController.streamDelivery),
+);
+
 export default router;

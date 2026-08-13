@@ -88,10 +88,7 @@ export class CourierService {
       );
 
       if (!hasCourierRole) {
-        await userRoleRepo.assignGlobalRole(
-          { userId, role: "COURIER" },
-          tx,
-        );
+        await userRoleRepo.assignGlobalRole({ userId, role: "COURIER" }, tx);
       }
 
       await accountService.ensureAccount(
@@ -137,18 +134,16 @@ export class CourierService {
       create: { courierId: courier.id, latitude, longitude },
     });
 
-    const activeDelivery = await deliveryRepo.findActiveByCourierId(
-      courier.id,
-    );
+    const activeDelivery = await deliveryRepo.findActiveByCourierId(courier.id);
 
     if (activeDelivery) {
-      publishDeliveryLocation({
+      await publishDeliveryLocation({
         deliveryId: activeDelivery.id,
         orderId: activeDelivery.orderId,
         userId: activeDelivery.userId,
         courierId: courier.id,
         courierUserId: courier.userId,
-        status: activeDelivery.status as any,
+        status: activeDelivery.status,
         latitude,
         longitude,
       });
@@ -232,9 +227,7 @@ export class CourierService {
 
     await cancelAssignmentTimeout(deliveryId);
 
-    publishDeliveryAccepted(
-      this.buildDeliveryPayload(delivery, courier),
-    );
+    await publishDeliveryAccepted(this.buildDeliveryPayload(delivery, courier));
 
     return { success: true, deliveryId, status: delivery.status };
   }
@@ -343,7 +336,7 @@ export class CourierService {
     if (result.success) {
       await scheduleAssignmentTimeout(deliveryId);
 
-      publishDeliveryEvent({
+      await publishDeliveryEvent({
         ...this.buildDeliveryPayload(result.delivery, {
           id: result.courierId,
           userId: result.courierUserId,
@@ -443,7 +436,7 @@ export class CourierService {
       deliveryRepo.markPickedUp(deliveryId, tx),
     );
 
-    publishDeliveryEvent({
+    await publishDeliveryEvent({
       ...this.buildDeliveryPayload(updated, courier),
       status: "PICKED_UP",
     });
@@ -465,7 +458,7 @@ export class CourierService {
       deliveryRepo.markOnTheWay(deliveryId, tx),
     );
 
-    publishDeliveryEvent({
+    await publishDeliveryEvent({
       ...this.buildDeliveryPayload(updated, courier),
       status: "ON_THE_WAY",
     });
@@ -502,11 +495,52 @@ export class CourierService {
       return result;
     });
 
-    publishDeliveryEvent({
+    await publishDeliveryEvent({
       ...this.buildDeliveryPayload(updated, courier),
       status: "DELIVERED",
     });
 
     return updated;
+  }
+
+  async verifyDeliveryStreamAccess(deliveryId: string, requestUserId: string) {
+    const delivery = await deliveryRepo.findByIdPublic(deliveryId);
+
+    if (!delivery) {
+      throw new NotFoundError("Delivery not found");
+    }
+
+    const isCustomer = delivery.userId === requestUserId;
+
+    let isCourier = false;
+
+    if (delivery.courierId) {
+      const courier = await courierRepo.findById(delivery.courierId);
+
+      isCourier = courier?.userId === requestUserId;
+    }
+
+    if (isCustomer || isCourier) {
+      return {
+        authorized: true,
+        deliveryId: delivery.id,
+      };
+    }
+
+    const isAdmin = await userRoleRepo.hasRole({
+      userId: requestUserId,
+      role: "ADMIN",
+    });
+
+    if (!isAdmin) {
+      throw new ForbiddenError(
+        "You are not allowed to access this delivery stream",
+      );
+    }
+
+    return {
+      authorized: true,
+      deliveryId: delivery.id,
+    };
   }
 }
