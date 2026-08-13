@@ -35,7 +35,9 @@ export class LoginSessionService {
 
     if (!user) throw new Error("User not found");
 
-    return await loginSessionRepository.findByUserId(userId);
+    const sessions = await loginSessionRepository.findByUserId(userId);
+
+    return sessions;
   }
 
   async getActiveSessions(userId: string) {
