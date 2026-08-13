@@ -1,21 +1,21 @@
-import { CourierStatus, VehicleType } from "@prisma/client";
+import { VehicleType } from "@prisma/client";
 import { prisma } from "config/prisma";
 import {
   publishDeliveryAccepted,
   publishDeliveryEvent,
   publishDeliveryLocation,
 } from "helpers/deliveryEvents";
+import { AccountService } from "modules/account/account.service";
+import { CourierEarningsRepository } from "modules/courier/courier-earnings.repository";
+import { CourierRepository } from "modules/courier/courier.repository";
+import { DeliveryRepository } from "modules/courier/delivery.repository";
+import { UserRoleRepository } from "modules/user-role/user-role.repository";
 import {
   cancelAssignmentTimeout,
   dispatchAssignDelivery,
   scheduleAssignmentTimeout,
 } from "queue/dispatch";
 import { ForbiddenError, NotFoundError } from "shared/errors";
-import { AccountService } from "modules/account/account.service";
-import { CourierEarningsRepository } from "modules/courier/courier-earnings.repository";
-import { CourierRepository } from "modules/courier/courier.repository";
-import { DeliveryRepository } from "modules/courier/delivery.repository";
-import { UserRoleRepository } from "modules/user-role/user-role.repository";
 import {
   filterAvailableCouriers,
   findNearestCouriers,
@@ -215,6 +215,49 @@ export class CourierService {
     return { courier, delivery };
   }
 
+  async createDelivery(
+    userId: string,
+    data: {
+      userId?: string;
+      bookingId?: string | null;
+      orderId?: string | null;
+      pickupAddress: string;
+      dropoffAddress: string;
+      pickupLatitude?: number | null;
+      pickupLongitude?: number | null;
+      dropoffLatitude?: number | null;
+      dropoffLongitude?: number | null;
+    },
+  ) {
+    console.log(data);
+
+    const delivery = await prisma.$transaction(async (tx) => {
+      const created = await deliveryRepo.createDelivery(
+        {
+          userId,
+
+          orderId: data.orderId,
+          bookingId: data.bookingId,
+
+          pickupAddress: data.pickupAddress,
+          pickupLatitude: data.pickupLatitude,
+          pickupLongitude: data.pickupLongitude,
+
+          dropoffAddress: data.dropoffAddress,
+          dropoffLatitude: data.dropoffLatitude,
+          dropoffLongitude: data.dropoffLongitude,
+        },
+        tx,
+      );
+
+      return created;
+    });
+
+    await dispatchAssignDelivery(delivery.id);
+
+    return delivery;
+  }
+
   async acceptDelivery(deliveryId: string, userId: string) {
     const { courier, delivery } = await this.requireAssignedCourier(
       deliveryId,
@@ -227,9 +270,13 @@ export class CourierService {
 
     await cancelAssignmentTimeout(deliveryId);
 
-    await publishDeliveryAccepted(this.buildDeliveryPayload(delivery, courier));
+    const updated = await prisma.$transaction(async (tx) => {
+      return deliveryRepo.updateStatus(deliveryId, "ASSIGNED", tx);
+    });
 
-    return { success: true, deliveryId, status: delivery.status };
+    await publishDeliveryAccepted(this.buildDeliveryPayload(updated, courier));
+
+    return { success: true, deliveryId, status: updated.status };
   }
 
   async assignDelivery(deliveryId: string) {

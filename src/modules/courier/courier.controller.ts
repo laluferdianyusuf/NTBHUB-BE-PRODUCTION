@@ -1,8 +1,8 @@
 import { Request, Response } from "express";
-import { runService } from "shared/http/serviceError";
-import { sendSuccess } from "shared/http/response";
 import { CourierService } from "modules/courier/courier.service";
 import { subscribeDeliveryStream } from "services/delivery.sse.service";
+import { sendSuccess } from "shared/http/response";
+import { runService } from "shared/http/serviceError";
 
 const courierService = new CourierService();
 
@@ -20,6 +20,36 @@ export class CourierController {
     );
 
     return sendSuccess(res, result, "Courier registered", 201);
+  }
+
+  static async createDelivery(req: Request, res: Response) {
+    const userId = req.user!.id;
+
+    const {
+      orderId,
+      bookingId,
+      pickupAddress,
+      pickupLatitude,
+      pickupLongitude,
+      dropoffAddress,
+      dropoffLatitude,
+      dropoffLongitude,
+    } = req.body;
+
+    const result = await runService(() =>
+      courierService.createDelivery(userId, {
+        orderId,
+        bookingId,
+        pickupAddress,
+        pickupLatitude,
+        pickupLongitude,
+        dropoffAddress,
+        dropoffLatitude,
+        dropoffLongitude,
+      }),
+    );
+
+    return sendSuccess(res, result, "Delivery created", 201);
   }
 
   static async getProfile(req: Request, res: Response) {

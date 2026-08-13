@@ -1,5 +1,5 @@
-import { CourierController } from "modules/courier/courier.controller";
 import { Router } from "express";
+import { CourierController } from "modules/courier/courier.controller";
 import { asyncHandler } from "shared/http/asyncHandler";
 import { auth } from "shared/middleware/auth";
 
@@ -16,6 +16,13 @@ router.get(
   auth.authenticate,
   auth.authorizeGlobalRole(["COURIER"]),
   asyncHandler(CourierController.getProfile),
+);
+
+router.post(
+  "/deliveries",
+  auth.authenticate,
+  auth.authorizeGlobalRole(["CUSTOMER"]),
+  asyncHandler(CourierController.createDelivery),
 );
 
 router.patch(

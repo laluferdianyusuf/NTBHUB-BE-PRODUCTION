@@ -18,7 +18,7 @@ export async function findNearestCouriers(
   radiusKm = 5,
   limit = 10,
 ) {
-  const result = await redis.geosearch(
+  const result = await redis.georadius(
     "couriers:geo",
     "FROMLONLAT",
     lng,
