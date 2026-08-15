@@ -1,10 +1,7 @@
 import { prisma } from "config/prisma";
-import {
-  publishDeliveryEvent,
-  publishDeliveryLocation,
-} from "helpers/deliveryEvents";
+import { publishDeliveryLocation } from "helpers/deliveryEvents";
 
-export class CourierTrackingService {
+export class CourierLocationRepository {
   async updateLocation(courierId: string, latitude: number, longitude: number) {
     const location = await prisma.courierLocation.upsert({
       where: { courierId },
@@ -42,8 +39,17 @@ export class CourierTrackingService {
         status: delivery.status as any,
         latitude,
         longitude,
+        timestamp: new Date().toISOString(),
       });
     }
+
+    return location;
+  }
+
+  async findCourierLocation(courierId: string) {
+    const location = await prisma.courierLocation.findUnique({
+      where: { courierId },
+    });
 
     return location;
   }

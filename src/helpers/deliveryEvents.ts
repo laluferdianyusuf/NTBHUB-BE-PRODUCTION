@@ -23,68 +23,82 @@ export interface DeliveryEventPayload {
   courierId?: string | null;
   courierUserId?: string | null;
 
-  status?: string;
+  status: string;
 
   pickupAddress?: string;
   dropoffAddress?: string;
-
-  latitude?: number;
-  longitude?: number;
 }
 
-export function publishDeliveryEvent(
-  payload: DeliveryEventPayload & {
-    status: string;
-  },
-) {
+export interface DeliveryLocationPayload {
+  deliveryId: string;
+
+  orderId?: string | null;
+  bookingId?: string | null;
+
+  userId?: string | null;
+
+  courierId: string;
+  courierUserId?: string | null;
+
+  status: string;
+
+  latitude: number;
+  longitude: number;
+
+  timestamp: string;
+}
+
+interface DeliverySSEMessage<T> {
+  deliveryId: string;
+  event: DeliverySSEEvent;
+  payload: T;
+}
+
+export async function publishDeliveryEvent(payload: DeliveryEventPayload) {
   const event = getDeliveryEvent(payload.status);
 
   if (!event) return;
 
-  publishEvent("delivery-events", event, payload);
+  await publishEvent("delivery-events", event, payload);
 
-  publisher.publish(
-    DELIVERY_SSE_CHANNEL,
-    JSON.stringify({
-      deliveryId: payload.deliveryId,
-      event,
-      payload,
-    }),
-  );
+  const message: DeliverySSEMessage<DeliveryEventPayload> = {
+    deliveryId: payload.deliveryId,
+    event,
+    payload,
+  };
+
+  await publisher.publish(DELIVERY_SSE_CHANNEL, JSON.stringify(message));
 }
 
-export function publishDeliveryAccepted(payload: DeliveryEventPayload) {
-  publishEvent("delivery-events", "delivery:accepted", payload);
+export async function publishDeliveryAccepted(payload: DeliveryEventPayload) {
+  const message: DeliverySSEMessage<DeliveryEventPayload> = {
+    deliveryId: payload.deliveryId,
+    event: "delivery:accepted",
+    payload,
+  };
 
-  publisher.publish(
-    DELIVERY_SSE_CHANNEL,
-    JSON.stringify({
-      deliveryId: payload.deliveryId,
-      event: "delivery:accepted",
-      payload,
-    }),
-  );
+  await publishEvent("delivery-events", "delivery:accepted", payload);
+
+  await publisher.publish(DELIVERY_SSE_CHANNEL, JSON.stringify(message));
 }
 
-export function publishDeliveryLocation(
-  payload: DeliveryEventPayload & {
-    latitude: number;
-    longitude: number;
-  },
+export async function publishDeliveryLocation(
+  payload: DeliveryLocationPayload,
 ) {
-  publishEvent("delivery-events", "delivery:location", payload);
+  const message: DeliverySSEMessage<DeliveryLocationPayload> = {
+    deliveryId: payload.deliveryId,
+    event: "delivery:location",
+    payload,
+  };
 
-  publisher.publish(
-    DELIVERY_SSE_CHANNEL,
-    JSON.stringify({
-      deliveryId: payload.deliveryId,
-      event: "delivery:location",
-      payload,
-    }),
-  );
+  await publishEvent("delivery-events", "delivery:location", payload);
+
+  await publisher.publish(DELIVERY_SSE_CHANNEL, JSON.stringify(message));
 }
 
-function getDeliveryEvent(status: string): DeliverySSEEvent | null {
+function getDeliveryEvent(
+  status: string,
+): Exclude<DeliverySSEEvent, "delivery:accepted" | "delivery:location"> | null {
   switch (status) {
     case "ASSIGNED":
       return "delivery:assigned";

@@ -137,6 +137,15 @@ enum DeliveryStatus {
   CANCELLED
 }
 
+enum DeliveryPaymentStatus {
+  UNPAID
+  PENDING
+  PAID
+  FAILED
+  EXPIRED
+  REFUNDED
+}
+
 enum StaffPosition {
   MANAGER
   CASHIER
@@ -223,6 +232,7 @@ enum InvoiceEntityType {
   EVENT_ORDER
   COMMUNITY_EVENT_ORDER
   TOPUP
+  DELIVERY
   ORDER
 }
 
@@ -244,6 +254,8 @@ enum LedgerReferenceType {
   TOPUP
   BOOKING_PAYMENT
   EVENT_PAYMENT
+  DELIVERY_PAYMENT
+  DELIVERY_EARNING
   COMMUNITY_EVENT_PAYMENT
   REFUND
   WITHDRAWAL
@@ -505,6 +517,15 @@ model UserBalance {
   user User @relation(fields: [userId], references: [id])
 }
 
+model CourierBalance {
+  id        String   @id @default(uuid())
+  courierId String   @unique
+  balance   Decimal  @default(0) @db.Decimal(18, 2)
+  updatedAt DateTime @default(now()) @updatedAt
+
+  courier Courier @relation(fields: [courierId], references: [id])
+}
+
 model EventBalance {
   id        String   @id @default(uuid())
   eventId   String   @unique
@@ -557,12 +578,12 @@ model LoginSession {
   ipAddress String?
   userAgent String?
 
-refreshTokenHash String?
-  loginAt      DateTime  @default(now())
-  lastActiveAt DateTime  @default(now())
-  logoutAt     DateTime?
-  revokedAt    DateTime?
-  expiresAt    DateTime?
+  refreshTokenHash String?
+  loginAt          DateTime  @default(now())
+  lastActiveAt     DateTime  @default(now())
+  logoutAt         DateTime?
+  revokedAt        DateTime?
+  expiresAt        DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1599,6 +1620,7 @@ model Courier {
   courierEarnings         CourierEarnings[]
   accounts                Account[]
   userRoles               UserRole[]
+  courierBalance          CourierBalance?
 
   @@index([status])
   @@index([vehicleType])
@@ -1619,8 +1641,17 @@ model Delivery {
   dropoffLatitude  Float?
   dropoffLongitude Float?
 
-  status         DeliveryStatus @default(PENDING)
-  attemptCount   Int            @default(0)
+  basePrice    Int @default(0)
+  packagePrice Int @default(0)
+  speedPrice   Int @default(0)
+  totalPrice   Int @default(0)
+
+  note String?
+
+  status        DeliveryStatus        @default(PENDING)
+  paymentStatus DeliveryPaymentStatus @default(UNPAID)
+
+  attemptCount   Int       @default(0)
   lastAssignedAt DateTime?
 
   assignedAt  DateTime?

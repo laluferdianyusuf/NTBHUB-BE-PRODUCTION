@@ -18,6 +18,12 @@ router.get(
   asyncHandler(CourierController.getProfile),
 );
 
+router.get(
+  "/courier-location",
+  auth.authenticate,
+  asyncHandler(CourierController.getLocation),
+);
+
 router.post(
   "/deliveries",
   auth.authenticate,
@@ -105,6 +111,12 @@ router.post(
   auth.authenticate,
   auth.authorizeGlobalRole(["ADMIN"]),
   asyncHandler(CourierController.assignDelivery),
+);
+
+router.post(
+  "/pay/:deliveryId",
+  auth.authenticate,
+  asyncHandler(CourierController.payDelivery),
 );
 
 router.get(

@@ -17,6 +17,15 @@ export class PlatformBalanceRepository {
     });
   }
 
+  async findBalance(tx?: Prisma.TransactionClient) {
+    const client = this.transaction(tx);
+    const balance = await client.platformBalance.findUnique({
+      where: { id: "platform-balance" },
+    });
+
+    return balance;
+  }
+
   async decrementBalance(
     amount: number,
     tx?: Prisma.TransactionClient,

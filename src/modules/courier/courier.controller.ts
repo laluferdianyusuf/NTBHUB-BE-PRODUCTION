@@ -34,6 +34,9 @@ export class CourierController {
       dropoffAddress,
       dropoffLatitude,
       dropoffLongitude,
+      packageSize,
+      speed,
+      note,
     } = req.body;
 
     const result = await runService(() =>
@@ -46,6 +49,9 @@ export class CourierController {
         dropoffAddress,
         dropoffLatitude,
         dropoffLongitude,
+        packageSize,
+        speed,
+        note,
       }),
     );
 
@@ -55,6 +61,13 @@ export class CourierController {
   static async getProfile(req: Request, res: Response) {
     const result = await runService(() =>
       courierService.getProfile(req.user!.id),
+    );
+    return sendSuccess(res, result, "Courier profile retrieved");
+  }
+
+  static async getLocation(req: Request, res: Response) {
+    const result = await runService(() =>
+      courierService.getCourierLocation(req.user!.id),
     );
     return sendSuccess(res, result, "Courier profile retrieved");
   }
@@ -143,6 +156,15 @@ export class CourierController {
       courierService.assignDelivery(req.params.deliveryId),
     );
     return sendSuccess(res, result, "Driver assigned");
+  }
+
+  static async payDelivery(req: Request, res: Response) {
+    const userId = req.user.id;
+    const pin = req.body.pin;
+    const result = await runService(() =>
+      courierService.payDelivery(req.params.deliveryId, userId, pin),
+    );
+    return sendSuccess(res, result, "Driver paid");
   }
 
   static async streamDelivery(req: Request, res: Response) {

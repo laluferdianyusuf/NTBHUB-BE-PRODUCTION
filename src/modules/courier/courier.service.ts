@@ -1,32 +1,50 @@
-import { VehicleType } from "@prisma/client";
+import {
+  DeliveryPaymentStatus,
+  LedgerDirection,
+  VehicleType,
+} from "@prisma/client";
 import { prisma } from "config/prisma";
 import {
   publishDeliveryAccepted,
   publishDeliveryEvent,
   publishDeliveryLocation,
 } from "helpers/deliveryEvents";
+import { AccountRepository } from "modules/account";
 import { AccountService } from "modules/account/account.service";
 import { CourierEarningsRepository } from "modules/courier/courier-earnings.repository";
 import { CourierRepository } from "modules/courier/courier.repository";
 import { DeliveryRepository } from "modules/courier/delivery.repository";
+import { PlatformBalanceRepository } from "modules/finance";
+import { LedgerRepository } from "modules/ledger";
+import { UserBalanceRepository } from "modules/user-balance";
 import { UserRoleRepository } from "modules/user-role/user-role.repository";
+import { UserRepository } from "modules/users/users.repository";
+import { UserService } from "modules/users/users.service";
 import {
   cancelAssignmentTimeout,
   dispatchAssignDelivery,
   scheduleAssignmentTimeout,
 } from "queue/dispatch";
-import { ForbiddenError, NotFoundError } from "shared/errors";
+import { BadRequestError, ForbiddenError, NotFoundError } from "shared/errors";
 import {
   filterAvailableCouriers,
   findNearestCouriers,
   updateCourierLocation as updateCourierGeo,
 } from "socket/courier.socket";
+import { CourierLocationRepository } from "./courier-location.repository";
 
 const courierRepo = new CourierRepository();
+const courierLocationRepo = new CourierLocationRepository();
 const deliveryRepo = new DeliveryRepository();
 const userRoleRepo = new UserRoleRepository();
 const accountService = new AccountService();
 const earningsRepo = new CourierEarningsRepository();
+const userBalanceRepo = new UserBalanceRepository();
+const platformBalanceRepo = new PlatformBalanceRepository();
+const accountRepo = new AccountRepository();
+const ledgerRepo = new LedgerRepository();
+const userRepo = new UserRepository();
+const userService = new UserService();
 
 const MAX_ATTEMPT = 5;
 const DEFAULT_COURIER_EARNING = 10000;
@@ -40,6 +58,7 @@ export class CourierService {
       userId?: string | null;
       courierId?: string | null;
       status: string;
+      paymentStatus?: string;
       pickupAddress: string;
       dropoffAddress: string;
     },
@@ -53,8 +72,10 @@ export class CourierService {
       courierId: delivery.courierId,
       courierUserId: courier?.userId ?? null,
       status: delivery.status as any,
+      paymentStatus: delivery.paymentStatus as any,
       pickupAddress: delivery.pickupAddress,
       dropoffAddress: delivery.dropoffAddress,
+      courier,
     };
   }
 
@@ -146,6 +167,8 @@ export class CourierService {
         status: activeDelivery.status,
         latitude,
         longitude,
+
+        timestamp: new Date().toISOString(),
       });
     }
 
@@ -201,9 +224,20 @@ export class CourierService {
     return deliveryRepo.findHistoryByCourierId(courier.id);
   }
 
+  async getCourierLocation(userId: string) {
+    const courier = await courierRepo.findByUserId(userId);
+    if (!courier) throw new NotFoundError("Courier not found");
+
+    const location = await courierLocationRepo.findCourierLocation(courier.id);
+    return location;
+  }
+
   private async requireAssignedCourier(deliveryId: string, userId: string) {
     const courier = await courierRepo.findByUserId(userId);
     if (!courier) throw new NotFoundError("Courier profile not found");
+
+    const location = await courierLocationRepo.findCourierLocation(courier.id);
+    if (!courier) throw new NotFoundError("Courier locations not found");
 
     const delivery = await deliveryRepo.findByIdPublic(deliveryId);
     if (!delivery) throw new NotFoundError("Delivery not found");
@@ -212,7 +246,7 @@ export class CourierService {
       throw new ForbiddenError("Not assigned to this delivery");
     }
 
-    return { courier, delivery };
+    return { courier, delivery, location };
   }
 
   async createDelivery(
@@ -227,9 +261,25 @@ export class CourierService {
       pickupLongitude?: number | null;
       dropoffLatitude?: number | null;
       dropoffLongitude?: number | null;
+
+      packageSize?: "SMALL" | "MEDIUM" | "LARGE";
+      speed?: "STANDARD" | "EXPRESS";
+
+      note?: string;
     },
   ) {
-    console.log(data);
+    const basePrice = 12000;
+
+    const packagePrice =
+      data.packageSize === "MEDIUM"
+        ? 5000
+        : data.packageSize === "LARGE"
+          ? 12000
+          : 0;
+
+    const speedPrice = data.speed === "EXPRESS" ? 15000 : 0;
+
+    const totalPrice = basePrice + packagePrice + speedPrice;
 
     const delivery = await prisma.$transaction(async (tx) => {
       const created = await deliveryRepo.createDelivery(
@@ -246,6 +296,14 @@ export class CourierService {
           dropoffAddress: data.dropoffAddress,
           dropoffLatitude: data.dropoffLatitude,
           dropoffLongitude: data.dropoffLongitude,
+
+          basePrice,
+          packagePrice,
+          speedPrice,
+          totalPrice,
+
+          paymentStatus: "UNPAID",
+          note: data.note,
         },
         tx,
       );
@@ -268,15 +326,35 @@ export class CourierService {
       throw new Error("Delivery is not waiting for acceptance");
     }
 
+    if (delivery.paymentStatus !== "PAID") {
+      throw new Error("Delivery must be paid before acceptance");
+    }
+
     await cancelAssignmentTimeout(deliveryId);
 
     const updated = await prisma.$transaction(async (tx) => {
+      await deliveryRepo.createAssignmentLog(
+        {
+          deliveryId,
+          courierId: courier.id,
+          status: "ACCEPTED",
+        },
+        tx,
+      );
+
+      await courierRepo.setOnDelivery(courier.id, tx);
+
       return deliveryRepo.updateStatus(deliveryId, "ASSIGNED", tx);
     });
 
     await publishDeliveryAccepted(this.buildDeliveryPayload(updated, courier));
 
-    return { success: true, deliveryId, status: updated.status };
+    return {
+      success: true,
+      deliveryId,
+      status: updated.status,
+      paymentStatus: updated.paymentStatus,
+    };
   }
 
   async assignDelivery(deliveryId: string) {
@@ -351,7 +429,7 @@ export class CourierService {
             tx,
           );
 
-          await courierRepo.setOnDelivery(courier.id, tx);
+          // await courierRepo.setOnDelivery(courier.id, tx);
 
           await deliveryRepo.createAssignmentLog(
             {
@@ -477,6 +555,14 @@ export class CourierService {
       throw new Error("Delivery must be assigned before pickup");
     }
 
+    if (delivery.paymentStatus !== "PAID") {
+      throw new Error("Delivery must be paid before pickup");
+    }
+
+    if (courier.status !== "ON_DELIVERY") {
+      throw new Error("Courier has not accepted this delivery");
+    }
+
     await cancelAssignmentTimeout(deliveryId);
 
     const updated = await prisma.$transaction(async (tx) =>
@@ -542,6 +628,8 @@ export class CourierService {
       return result;
     });
 
+    await this.releaseCourierEarning(deliveryId);
+
     await publishDeliveryEvent({
       ...this.buildDeliveryPayload(updated, courier),
       status: "DELIVERED",
@@ -589,5 +677,258 @@ export class CourierService {
       authorized: true,
       deliveryId: delivery.id,
     };
+  }
+
+  async payDelivery(deliveryId: string, userId: string, pin: string) {
+    return prisma.$transaction(async (tx) => {
+      const delivery = await deliveryRepo.findByIdPublic(deliveryId, tx);
+
+      if (!delivery) {
+        throw new NotFoundError("Delivery not found");
+      }
+
+      if (delivery.userId !== userId) {
+        throw new BadRequestError("You are not allowed to pay this delivery");
+      }
+
+      const user = await userRepo.findById(userId);
+
+      if (!user) throw new NotFoundError("User not found");
+
+      if (!user.biometricEnabled) {
+        await userService.verifyPin(userId, pin);
+      }
+
+      if (delivery.paymentStatus === "PAID") {
+        throw new BadRequestError("Delivery has already been paid");
+      }
+
+      if (delivery.status === "CANCELLED") {
+        throw new BadRequestError("Cancelled delivery cannot be paid");
+      }
+
+      if (delivery.totalPrice <= 0) {
+        throw new BadRequestError("Delivery price must be greater than zero");
+      }
+
+      const amount = delivery.totalPrice;
+
+      const userBalance = await userBalanceRepo.getBalanceByUserId(userId, tx);
+
+      if (!userBalance) {
+        throw new BadRequestError("User wallet not found");
+      }
+
+      if (Number(userBalance) < amount) {
+        throw new BadRequestError("Insufficient wallet balance");
+      }
+
+      await userBalanceRepo.decrementBalance(userId, amount, tx);
+
+      const platformBalance = await platformBalanceRepo.findBalance(tx);
+
+      if (!platformBalance) {
+        throw new BadRequestError("Platform balance not found");
+      }
+
+      await platformBalanceRepo.incrementBalance(amount, tx);
+
+      const userAccount = await accountRepo.findUserAccount(userId, tx);
+
+      if (!userAccount) {
+        throw new BadRequestError("User account not found");
+      }
+
+      await ledgerRepo.createEntry(
+        {
+          accountId: userAccount.id,
+          type: LedgerDirection.CREDIT,
+          amount,
+          referenceType: "DELIVERY_PAYMENT",
+          referenceId: delivery.id,
+        },
+        tx,
+      );
+
+      const platformAccount = await accountRepo.findPlatformAccount(tx);
+
+      if (!platformAccount) {
+        throw new BadRequestError("Platform account not found");
+      }
+
+      await ledgerRepo.createEntry(
+        {
+          accountId: userAccount.id,
+          type: LedgerDirection.DEBIT,
+          amount,
+          referenceType: "DELIVERY_PAYMENT",
+          referenceId: delivery.id,
+        },
+        tx,
+      );
+
+      const updatedDelivery = await tx.delivery.update({
+        where: {
+          id: delivery.id,
+        },
+        data: {
+          paymentStatus: DeliveryPaymentStatus.PAID,
+        },
+      });
+
+      return {
+        success: true,
+        deliveryId: updatedDelivery.id,
+        paymentStatus: updatedDelivery.paymentStatus,
+        amount,
+      };
+    });
+  }
+
+  async releaseCourierEarning(deliveryId: string) {
+    return prisma.$transaction(async (tx) => {
+      const delivery = await deliveryRepo.findByIdPublic(deliveryId, tx);
+
+      if (!delivery) {
+        throw new NotFoundError("Delivery not found");
+      }
+
+      if (delivery.status !== "DELIVERED") {
+        throw new BadRequestError(
+          "Courier earning can only be released after delivery is completed",
+        );
+      }
+
+      if (!delivery.courierId) {
+        throw new BadRequestError("Delivery has no courier");
+      }
+
+      if (delivery.paymentStatus !== "PAID") {
+        throw new BadRequestError("Delivery has not been paid");
+      }
+
+      const amount = delivery.totalPrice;
+
+      const platformBalance = await platformBalanceRepo.findBalance(tx);
+
+      if (!platformBalance) {
+        throw new BadRequestError("Platform balance not found");
+      }
+
+      if (Number(platformBalance.balance) < amount) {
+        throw new BadRequestError("Insufficient platform balance");
+      }
+
+      await platformBalanceRepo.incrementBalance(amount, tx);
+
+      let courierBalance = await tx.courierBalance.findUnique({
+        where: {
+          courierId: delivery.courierId,
+        },
+      });
+
+      if (!courierBalance) {
+        courierBalance = await tx.courierBalance.create({
+          data: {
+            courierId: delivery.courierId,
+            balance: amount,
+          },
+        });
+      } else {
+        await tx.courierBalance.update({
+          where: {
+            courierId: delivery.courierId,
+          },
+          data: {
+            balance: {
+              increment: amount,
+            },
+          },
+        });
+      }
+
+      const courierAccount = await accountRepo.findCourierAccount(
+        delivery.courierId,
+      );
+
+      if (!courierAccount) {
+        throw new BadRequestError("Courier account not found");
+      }
+
+      await ledgerRepo.createEntry(
+        {
+          accountId: courierAccount.id,
+          type: LedgerDirection.CREDIT,
+          amount,
+          referenceType: "DELIVERY_EARNING",
+          referenceId: delivery.id,
+        },
+        tx,
+      );
+
+      const platformAccount = await accountRepo.findPlatformAccount(tx);
+
+      if (!platformAccount) {
+        throw new BadRequestError("Platform account not found");
+      }
+
+      await ledgerRepo.createEntry(
+        {
+          accountId: platformAccount.id,
+          type: LedgerDirection.DEBIT,
+          amount,
+          referenceType: "DELIVERY_EARNING",
+          referenceId: delivery.id,
+        },
+        tx,
+      );
+
+      const now = new Date();
+
+      const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+      const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+      const existingEarning = await tx.courierEarnings.findFirst({
+        where: {
+          courierId: delivery.courierId,
+          periodStart,
+          periodEnd,
+        },
+      });
+
+      if (existingEarning) {
+        await tx.courierEarnings.update({
+          where: {
+            id: existingEarning.id,
+          },
+          data: {
+            totalTrips: {
+              increment: 1,
+            },
+            totalEarnings: {
+              increment: amount,
+            },
+          },
+        });
+      } else {
+        await tx.courierEarnings.create({
+          data: {
+            courierId: delivery.courierId,
+            periodStart,
+            periodEnd,
+            totalTrips: 1,
+            totalEarnings: amount,
+          },
+        });
+      }
+
+      return {
+        success: true,
+        deliveryId: delivery.id,
+        courierId: delivery.courierId,
+        amount,
+      };
+    });
   }
 }
