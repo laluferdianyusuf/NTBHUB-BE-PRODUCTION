@@ -28,6 +28,7 @@ export class CourierController {
     const {
       orderId,
       bookingId,
+      serviceType,
       pickupAddress,
       pickupLatitude,
       pickupLongitude,
@@ -37,12 +38,14 @@ export class CourierController {
       packageSize,
       speed,
       note,
+      items,
     } = req.body;
 
     const result = await runService(() =>
       courierService.createDelivery(userId, {
         orderId,
         bookingId,
+        serviceType,
         pickupAddress,
         pickupLatitude,
         pickupLongitude,
@@ -52,6 +55,7 @@ export class CourierController {
         packageSize,
         speed,
         note,
+        items,
       }),
     );
 

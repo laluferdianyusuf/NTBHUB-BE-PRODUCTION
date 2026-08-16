@@ -1,4 +1,9 @@
-import { DeliveryPaymentStatus, DeliveryStatus, Prisma } from "@prisma/client";
+import {
+  DeliveryPaymentStatus,
+  DeliveryServiceType,
+  DeliveryStatus,
+  Prisma,
+} from "@prisma/client";
 import { prisma } from "config/prisma";
 
 const deliveryInclude = {
@@ -41,18 +46,28 @@ export class DeliveryRepository {
       userId?: string;
       bookingId?: string | null;
       orderId?: string | null;
+
+      serviceType: DeliveryServiceType;
       pickupAddress: string;
       dropoffAddress: string;
+
       pickupLatitude?: number | null;
       pickupLongitude?: number | null;
       dropoffLatitude?: number | null;
       dropoffLongitude?: number | null;
+
       basePrice?: number | null;
       packagePrice?: number | null;
       speedPrice?: number | null;
       totalPrice?: number | null;
+
       paymentStatus: DeliveryPaymentStatus;
       note?: string;
+
+      items?: {
+        name: string;
+        quantity?: number;
+      }[];
     },
     tx?: Prisma.TransactionClient,
   ) {
@@ -64,24 +79,42 @@ export class DeliveryRepository {
         bookingId: data.bookingId ?? null,
         orderId: data.orderId ?? null,
 
+        serviceType: data.serviceType,
+
         pickupAddress: data.pickupAddress,
         dropoffAddress: data.dropoffAddress,
 
         pickupLatitude: data.pickupLatitude ?? null,
         pickupLongitude: data.pickupLongitude ?? null,
+
         dropoffLatitude: data.dropoffLatitude ?? null,
         dropoffLongitude: data.dropoffLongitude ?? null,
 
         status: "PENDING",
 
-        basePrice: data.basePrice ?? null,
-        packagePrice: data.packagePrice ?? null,
-        speedPrice: data.speedPrice ?? null,
-        totalPrice: data.totalPrice ?? null,
+        basePrice: data.basePrice ?? 0,
+        packagePrice: data.packagePrice ?? 0,
+        speedPrice: data.speedPrice ?? 0,
+        totalPrice: data.totalPrice ?? 0,
 
         paymentStatus: data.paymentStatus,
 
         note: data.note ?? null,
+
+        ...(data.items?.length
+          ? {
+              items: {
+                create: data.items.map((item) => ({
+                  name: item.name,
+                  quantity: item.quantity ?? 1,
+                })),
+              },
+            }
+          : {}),
+      },
+
+      include: {
+        items: true,
       },
     });
   }

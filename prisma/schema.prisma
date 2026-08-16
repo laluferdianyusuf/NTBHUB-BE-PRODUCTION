@@ -137,6 +137,13 @@ enum DeliveryStatus {
   CANCELLED
 }
 
+enum DeliveryServiceType {
+  RIDE
+  DELIVERY
+  PICKUP_DELIVERY
+  SHOP_DELIVERY
+}
+
 enum DeliveryPaymentStatus {
   UNPAID
   PENDING
@@ -1633,6 +1640,8 @@ model Delivery {
   bookingId String? @unique
   orderId   String? @unique
 
+  serviceType DeliveryServiceType @default(DELIVERY)
+
   pickupAddress  String
   dropoffAddress String
 
@@ -1640,6 +1649,8 @@ model Delivery {
   pickupLongitude  Float?
   dropoffLatitude  Float?
   dropoffLongitude Float?
+
+  items DeliveryItem[]
 
   basePrice    Int @default(0)
   packagePrice Int @default(0)
@@ -1673,6 +1684,21 @@ model Delivery {
   @@index([bookingId])
   @@index([orderId])
   @@index([status])
+}
+
+model DeliveryItem {
+  id String @id @default(cuid())
+
+  deliveryId String
+  delivery   Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  name     String
+  quantity Int    @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([deliveryId])
 }
 
 model DeliveryAssignmentLog {

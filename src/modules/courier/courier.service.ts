@@ -1,5 +1,6 @@
 import {
   DeliveryPaymentStatus,
+  DeliveryServiceType,
   LedgerDirection,
   VehicleType,
 } from "@prisma/client";
@@ -252,11 +253,14 @@ export class CourierService {
   async createDelivery(
     userId: string,
     data: {
-      userId?: string;
       bookingId?: string | null;
       orderId?: string | null;
+
+      serviceType: DeliveryServiceType;
+
       pickupAddress: string;
       dropoffAddress: string;
+
       pickupLatitude?: number | null;
       pickupLongitude?: number | null;
       dropoffLatitude?: number | null;
@@ -266,6 +270,11 @@ export class CourierService {
       speed?: "STANDARD" | "EXPRESS";
 
       note?: string;
+
+      items?: {
+        name: string;
+        quantity?: number;
+      }[];
     },
   ) {
     const basePrice = 12000;
@@ -274,8 +283,8 @@ export class CourierService {
       data.packageSize === "MEDIUM"
         ? 5000
         : data.packageSize === "LARGE"
-          ? 12000
-          : 0;
+          ? 7000
+          : 3000;
 
     const speedPrice = data.speed === "EXPRESS" ? 15000 : 0;
 
@@ -286,16 +295,18 @@ export class CourierService {
         {
           userId,
 
-          orderId: data.orderId,
-          bookingId: data.bookingId,
+          bookingId: data.bookingId ?? null,
+          orderId: data.orderId ?? null,
+
+          serviceType: data.serviceType,
 
           pickupAddress: data.pickupAddress,
-          pickupLatitude: data.pickupLatitude,
-          pickupLongitude: data.pickupLongitude,
+          pickupLatitude: data.pickupLatitude ?? null,
+          pickupLongitude: data.pickupLongitude ?? null,
 
           dropoffAddress: data.dropoffAddress,
-          dropoffLatitude: data.dropoffLatitude,
-          dropoffLongitude: data.dropoffLongitude,
+          dropoffLatitude: data.dropoffLatitude ?? null,
+          dropoffLongitude: data.dropoffLongitude ?? null,
 
           basePrice,
           packagePrice,
@@ -303,7 +314,10 @@ export class CourierService {
           totalPrice,
 
           paymentStatus: "UNPAID",
-          note: data.note,
+
+          note: data.note ?? null,
+
+          items: data.items ?? [],
         },
         tx,
       );
