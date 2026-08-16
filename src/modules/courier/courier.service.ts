@@ -132,13 +132,13 @@ export class CourierService {
     const courier = await courierRepo.findByUserId(userId);
     if (!courier) throw new NotFoundError("Courier profile not found");
 
-    if (courier.status === "ON_DELIVERY" && status === "OFFLINE") {
+    if (courier.availability === "BUSY" && status === "OFFLINE") {
       throw new Error("Cannot go offline while on delivery");
     }
 
     const updated = await prisma.$transaction(async (tx) => {
       await courierRepo.logAvailability(courier.id, status, undefined, tx);
-      return courierRepo.updateStatus(courier.id, status, tx);
+      return courierRepo.updateAvailability(courier.id, status, tx);
     });
 
     return updated;
@@ -573,7 +573,7 @@ export class CourierService {
       throw new Error("Delivery must be paid before pickup");
     }
 
-    if (courier.status !== "ON_DELIVERY") {
+    if (courier.availability !== "BUSY") {
       throw new Error("Courier has not accepted this delivery");
     }
 

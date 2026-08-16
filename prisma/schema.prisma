@@ -115,10 +115,17 @@ enum NewsStatus {
 }
 
 enum CourierStatus {
+  NOT_REGISTERED
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum CourierAvailability {
   OFFLINE
   ONLINE
-  ON_DELIVERY
-  SUSPENDED
+  BUSY
 }
 
 enum VehicleType {
@@ -1603,7 +1610,8 @@ model NewsComment {
 model Courier {
   id     String        @id @default(uuid())
   userId String        @unique
-  status CourierStatus @default(OFFLINE)
+  status CourierStatus @default(NOT_REGISTERED)
+  availability CourierAvailability @default(OFFLINE)
 
   vehicleType VehicleType
   plateNumber String?
@@ -1753,7 +1761,7 @@ model CourierRating {
 model CourierAvailabilityLog {
   id        String        @id @default(uuid())
   courierId String
-  status    CourierStatus
+  status    CourierAvailability @default(OFFLINE)
   note      String? // opsional, misal alasan OFFLINE / SUSPENDED
   createdAt DateTime      @default(now())
 

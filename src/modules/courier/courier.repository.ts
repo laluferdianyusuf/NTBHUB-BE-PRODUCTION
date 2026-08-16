@@ -1,4 +1,9 @@
-import { CourierStatus, Prisma, VehicleType } from "@prisma/client";
+import {
+  CourierAvailability,
+  CourierStatus,
+  Prisma,
+  VehicleType,
+} from "@prisma/client";
 import { prisma } from "config/prisma";
 
 export class CourierRepository {
@@ -41,7 +46,8 @@ export class CourierRepository {
         vehicleType: data.vehicleType,
         plateNumber: data.plateNumber,
         photo: data.photo,
-        status: "OFFLINE",
+        status: "NOT_REGISTERED",
+        availability: "OFFLINE",
       },
     });
   }
@@ -106,11 +112,23 @@ export class CourierRepository {
     });
   }
 
+  async updateAvailability(
+    id: string,
+    availability: CourierAvailability,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const client = tx ?? prisma;
+    return client.courier.update({
+      where: { id },
+      data: { availability },
+    });
+  }
+
   async setOnDelivery(id: string, tx: Prisma.TransactionClient) {
     return tx.courier.update({
       where: { id },
       data: {
-        status: "ON_DELIVERY",
+        availability: "BUSY",
       },
     });
   }
@@ -119,7 +137,7 @@ export class CourierRepository {
     return tx.courier.update({
       where: { id },
       data: {
-        status: "ONLINE",
+        availability: "ONLINE",
       },
     });
   }
@@ -135,7 +153,7 @@ export class CourierRepository {
 
   async logAvailability(
     courierId: string,
-    status: CourierStatus,
+    status: CourierAvailability,
     note?: string,
     tx?: Prisma.TransactionClient,
   ) {
