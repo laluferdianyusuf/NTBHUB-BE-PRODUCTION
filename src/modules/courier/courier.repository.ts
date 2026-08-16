@@ -46,7 +46,7 @@ export class CourierRepository {
         vehicleType: data.vehicleType,
         plateNumber: data.plateNumber,
         photo: data.photo,
-        status: "NOT_REGISTERED",
+        status: "PENDING",
         availability: "OFFLINE",
       },
     });
