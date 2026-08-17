@@ -19,6 +19,27 @@ router.get(
 );
 
 router.get(
+  "/admin/couriers",
+  auth.authenticate,
+  auth.authorizeGlobalRole(["ADMIN"]),
+  asyncHandler(CourierController.getAllCouriers),
+);
+
+router.patch(
+  "/admin/couriers:courierId/approve",
+  auth.authenticate,
+  auth.authorizeGlobalRole(["ADMIN"]),
+  asyncHandler(CourierController.approveCourier),
+);
+
+router.patch(
+  "/admin/couriers/:courierId/reject",
+  auth.authenticate,
+  auth.authorizeGlobalRole(["ADMIN"]),
+  asyncHandler(CourierController.rejectCourier),
+);
+
+router.get(
   "/courier-location",
   auth.authenticate,
   asyncHandler(CourierController.getLocation),

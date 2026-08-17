@@ -62,6 +62,36 @@ export class CourierController {
     return sendSuccess(res, result, "Delivery created", 201);
   }
 
+  static async getAllCouriers(req: Request, res: Response) {
+    const { status } = req.query;
+
+    const result = await runService(() =>
+      courierService.getAllCouriers(req.user!.id),
+    );
+
+    return sendSuccess(res, result, "Couriers retrieved");
+  }
+
+  static async approveCourier(req: Request, res: Response) {
+    const { courierId } = req.params;
+
+    const result = await runService(() =>
+      courierService.approveCourier(req.user!.id, courierId),
+    );
+
+    return sendSuccess(res, result, "Courier approved");
+  }
+
+  static async rejectCourier(req: Request, res: Response) {
+    const { courierId } = req.params;
+
+    const result = await runService(() =>
+      courierService.rejectCourier(req.user!.id, courierId),
+    );
+
+    return sendSuccess(res, result, "Courier rejected");
+  }
+
   static async getProfile(req: Request, res: Response) {
     const result = await runService(() =>
       courierService.getProfile(req.user!.id),

@@ -76,7 +76,7 @@ export class CourierRepository {
     if (excludeIds.length === 0) {
       return tx.$queryRawUnsafe<any[]>(`
         SELECT * FROM "Courier"
-        WHERE status = 'ONLINE'
+        WHERE availability = 'ONLINE'
         AND "isActive" = true
         ORDER BY rating DESC
         LIMIT ${limit}
@@ -89,7 +89,7 @@ export class CourierRepository {
     return tx.$queryRawUnsafe<any[]>(
       `
       SELECT * FROM "Courier"
-      WHERE status = 'ONLINE'
+      WHERE availability = 'ONLINE'
       AND "isActive" = true
       AND id NOT IN (${placeholders})
       ORDER BY rating DESC
@@ -109,6 +109,24 @@ export class CourierRepository {
     return client.courier.update({
       where: { id },
       data: { status },
+    });
+  }
+
+  async findAllForAdmin() {
+    return prisma.courier.findMany({
+      orderBy: {
+        createdAt: "desc",
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+          },
+        },
+      },
     });
   }
 

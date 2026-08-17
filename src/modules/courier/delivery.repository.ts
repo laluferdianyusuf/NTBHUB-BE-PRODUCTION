@@ -122,10 +122,20 @@ export class DeliveryRepository {
   async findByIdPublic(id: string, tx?: Prisma.TransactionClient) {
     const client = tx || prisma;
 
-    return client.delivery.findUnique({
+    const delivery = await client.delivery.findUnique({
       where: { id },
       include: deliveryInclude,
     });
+
+    console.log("[DeliveryRepository.findByIdPublic]", {
+      id,
+      status: delivery?.status,
+      paymentStatus: delivery?.paymentStatus,
+      courierId: delivery?.courierId,
+      updatedAt: delivery?.updatedAt,
+    });
+
+    return delivery;
   }
 
   async findByOrderId(orderId: string, tx?: Prisma.TransactionClient) {

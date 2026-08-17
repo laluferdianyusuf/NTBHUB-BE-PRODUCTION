@@ -1,3 +1,4 @@
+import { DeliveryPaymentStatus } from "@prisma/client";
 import { publisher } from "config/redis.config";
 import { publishEvent } from "./redisPubliser";
 
@@ -10,7 +11,8 @@ export type DeliverySSEEvent =
   | "delivery:on_the_way"
   | "delivery:delivered"
   | "delivery:cancelled"
-  | "delivery:location";
+  | "delivery:location"
+  | "delivery:payment_updated";
 
 export interface DeliveryEventPayload {
   deliveryId: string;
@@ -24,6 +26,7 @@ export interface DeliveryEventPayload {
   courierUserId?: string | null;
 
   status: string;
+  paymentStatus?: DeliveryPaymentStatus;
 
   pickupAddress?: string;
   dropoffAddress?: string;
@@ -44,6 +47,25 @@ export interface DeliveryLocationPayload {
 
   latitude: number;
   longitude: number;
+
+  timestamp: string;
+}
+
+export interface DeliveryPaymentPayload {
+  deliveryId: string;
+
+  orderId?: string | null;
+  bookingId?: string | null;
+
+  userId: string;
+
+  courierId?: string | null;
+  courierUserId?: string | null;
+
+  status: string;
+  paymentStatus: DeliveryPaymentStatus;
+
+  amount: number;
 
   timestamp: string;
 }
@@ -96,9 +118,37 @@ export async function publishDeliveryLocation(
   await publisher.publish(DELIVERY_SSE_CHANNEL, JSON.stringify(message));
 }
 
+/**
+ * Delivery payment event
+ *
+ * Triggered when:
+ * - UNPAID -> PAID
+ * - PENDING -> PAID
+ * - FAILED -> PAID
+ * - EXPIRED -> PAID
+ * - PAID -> REFUNDED
+ * - etc.
+ */
+export async function publishDeliveryPaymentUpdated(
+  payload: DeliveryPaymentPayload,
+) {
+  const message: DeliverySSEMessage<DeliveryPaymentPayload> = {
+    deliveryId: payload.deliveryId,
+    event: "delivery:payment_updated",
+    payload,
+  };
+
+  await publishEvent("delivery-events", "delivery:payment_updated", payload);
+
+  await publisher.publish(DELIVERY_SSE_CHANNEL, JSON.stringify(message));
+}
+
 function getDeliveryEvent(
   status: string,
-): Exclude<DeliverySSEEvent, "delivery:accepted" | "delivery:location"> | null {
+): Exclude<
+  DeliverySSEEvent,
+  "delivery:accepted" | "delivery:location" | "delivery:payment_updated"
+> | null {
   switch (status) {
     case "ASSIGNED":
       return "delivery:assigned";

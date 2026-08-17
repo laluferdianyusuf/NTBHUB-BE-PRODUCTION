@@ -1,6 +1,7 @@
+import { prisma } from "config/prisma";
 import { Response } from "express";
-import Redis from "ioredis";
 import { DELIVERY_SSE_CHANNEL } from "helpers/deliveryEvents";
+import Redis from "ioredis";
 
 const clients = new Map<string, Set<Response>>();
 
@@ -53,6 +54,8 @@ function deliverToClients(deliveryId: string, event: string, payload: unknown) {
         res.end();
       }
     } catch (error) {
+      console.error("[Delivery SSE] Failed to send event:", error);
+
       connections.delete(res);
     }
   }
@@ -84,6 +87,107 @@ function removeClient(deliveryId: string, res: Response) {
   }
 }
 
+async function getDeliverySnapshot(deliveryId: string) {
+  const delivery = await prisma.delivery.findUnique({
+    where: {
+      id: deliveryId,
+    },
+    include: {
+      courier: {
+        select: {
+          id: true,
+          userId: true,
+          vehicleType: true,
+          plateNumber: true,
+          photo: true,
+          rating: true,
+
+          user: {
+            select: {
+              id: true,
+              name: true,
+              phone: true,
+              photo: true,
+            },
+          },
+        },
+      },
+
+      order: {
+        select: {
+          id: true,
+          total: true,
+
+          venue: {
+            select: {
+              id: true,
+              name: true,
+              address: true,
+            },
+          },
+        },
+      },
+
+      items: true,
+    },
+  });
+
+  if (!delivery) {
+    return null;
+  }
+
+  let courierLocation = null;
+
+  if (delivery.courierId) {
+    courierLocation = await prisma.courierLocation.findUnique({
+      where: {
+        courierId: delivery.courierId,
+      },
+    });
+  }
+
+  return {
+    deliveryId: delivery.id,
+
+    orderId: delivery.orderId,
+    bookingId: delivery.bookingId,
+
+    userId: delivery.userId,
+
+    courierId: delivery.courierId,
+    courierUserId: delivery.courier?.userId ?? null,
+
+    status: delivery.status,
+    paymentStatus: delivery.paymentStatus,
+
+    pickupAddress: delivery.pickupAddress,
+    dropoffAddress: delivery.dropoffAddress,
+
+    pickupLatitude: delivery.pickupLatitude,
+    pickupLongitude: delivery.pickupLongitude,
+
+    dropoffLatitude: delivery.dropoffLatitude,
+    dropoffLongitude: delivery.dropoffLongitude,
+
+    basePrice: delivery.basePrice,
+    packagePrice: delivery.packagePrice,
+    speedPrice: delivery.speedPrice,
+    totalPrice: delivery.totalPrice,
+
+    note: delivery.note,
+
+    courier: delivery.courier,
+
+    order: delivery.order,
+
+    items: delivery.items,
+
+    courierLocation,
+
+    timestamp: new Date().toISOString(),
+  };
+}
+
 export async function subscribeDeliveryStream(
   deliveryId: string,
   res: Response,
@@ -92,7 +196,7 @@ export async function subscribeDeliveryStream(
 
   res.setHeader("Content-Type", "text/event-stream");
 
-  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
 
   res.setHeader("Connection", "keep-alive");
 
@@ -102,11 +206,26 @@ export async function subscribeDeliveryStream(
 
   addClient(deliveryId, res);
 
+  const snapshot = await getDeliverySnapshot(deliveryId);
+
+  if (!snapshot) {
+    res.write(
+      `event: delivery:error\n` +
+        `data: ${JSON.stringify({
+          deliveryId,
+          message: "Delivery not found",
+        })}\n\n`,
+    );
+
+    res.end();
+
+    removeClient(deliveryId, res);
+
+    return;
+  }
+
   res.write(
-    `event: connected\n` +
-      `data: ${JSON.stringify({
-        deliveryId,
-      })}\n\n`,
+    `event: delivery:connected\n` + `data: ${JSON.stringify(snapshot)}\n\n`,
   );
 
   const heartbeat = setInterval(() => {
