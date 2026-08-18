@@ -14,18 +14,29 @@ export const timeoutQueue = new Queue(TIMEOUT_QUEUE, {
 
 const timeoutJobId = (deliveryId: string) => `timeout-${deliveryId}`;
 
-export const dispatchAssignDelivery = async (deliveryId: string) => {
+export const dispatchAssignDelivery = async (
+  deliveryId: string,
+  options?: {
+    delay?: number;
+  },
+) => {
   await assignQueue.add(
     "assign-delivery",
-    { deliveryId },
     {
-      jobId: `assign-${deliveryId}-${Date.now()}`,
-      attempts: 5,
+      deliveryId,
+    },
+    {
+      delay: options?.delay ?? 0,
+
+      attempts: 3,
+
       backoff: {
         type: "exponential",
         delay: 3000,
       },
+
       removeOnComplete: true,
+
       removeOnFail: false,
     },
   );

@@ -486,15 +486,28 @@ export class CourierService {
     const result = await prisma.$transaction(async (tx) => {
       const delivery = await deliveryRepo.lockDelivery(deliveryId, tx);
 
-      if (!delivery) throw new Error("Delivery not found");
-
-      if (delivery.status !== "PENDING") {
-        return { skipped: true as const };
+      if (!delivery) {
+        throw new NotFoundError("Delivery not found");
       }
 
-      if ((delivery.attemptCount || 0) >= MAX_ATTEMPT) {
-        await deliveryRepo.updateStatus(delivery.id, "CANCELLED", tx);
-        return { failed: true as const, reason: "Max attempt reached" };
+      if (delivery.status !== DeliveryStatus.PENDING) {
+        return {
+          skipped: true as const,
+          reason: "DELIVERY_NOT_PENDING",
+        };
+      }
+
+      if ((delivery.attemptCount ?? 0) >= MAX_ATTEMPT) {
+        await deliveryRepo.updateStatus(
+          delivery.id,
+          DeliveryStatus.CANCELLED,
+          tx,
+        );
+
+        return {
+          failed: true as const,
+          reason: "MAX_ATTEMPT_REACHED",
+        };
       }
 
       const rejectedCourierIds = await deliveryRepo.getRejectedCourierIds(
@@ -504,31 +517,25 @@ export class CourierService {
 
       let candidateCourierIds: string[] = [];
 
-      const hasPickupCoordinates =
-        delivery.pickupLatitude !== null &&
-        delivery.pickupLatitude !== undefined &&
-        delivery.pickupLongitude !== null &&
-        delivery.pickupLongitude !== undefined &&
-        Number.isFinite(Number(delivery.pickupLatitude)) &&
-        Number.isFinite(Number(delivery.pickupLongitude));
+      const latitude = Number(delivery.pickupLatitude);
+      const longitude = Number(delivery.pickupLongitude);
 
-      if (hasPickupCoordinates) {
-        const latitude = Number(delivery.pickupLatitude);
-        const longitude = Number(delivery.pickupLongitude);
+      const hasValidCoordinates =
+        Number.isFinite(latitude) && Number.isFinite(longitude);
 
-        const nearbyIds = await findNearestCouriers(
+      if (hasValidCoordinates) {
+        const nearbyCourierIds = await findNearestCouriers(
           latitude,
           longitude,
-          100,
-          20,
+          10, // radius 10 km
+          20, // max 20 courier
         );
 
-        const availableIds = await filterAvailableCouriers(
-          nearbyIds as string[],
-        );
+        const availableCourierIds =
+          await filterAvailableCouriers(nearbyCourierIds);
 
-        candidateCourierIds = availableIds.filter(
-          (id) => !rejectedCourierIds.includes(id),
+        candidateCourierIds = availableCourierIds.filter(
+          (courierId) => !rejectedCourierIds.includes(courierId),
         );
       }
 
@@ -536,18 +543,19 @@ export class CourierService {
         const fallbackCouriers =
           await courierRepo.findAvailableCouriersWithLock(
             {
-              limit: 10,
+              limit: 20,
               excludeIds: rejectedCourierIds,
             },
             tx,
           );
 
-        candidateCourierIds = fallbackCouriers.map((c) => c.id);
+        candidateCourierIds = fallbackCouriers.map((courier) => courier.id);
       }
 
       if (!candidateCourierIds.length) {
-        await deliveryRepo.incrementAttempt(delivery.id, tx);
-        throw new Error("No available couriers");
+        return {
+          noCourier: true as const,
+        };
       }
 
       const couriers = await courierRepo.findByIdsWithLockOrdered(
@@ -556,7 +564,12 @@ export class CourierService {
       );
 
       for (const courier of couriers) {
-        if (courier.availability !== "ONLINE") continue;
+        if (courier.availability !== CourierAvailability.ONLINE) {
+          continue;
+        }
+        if (rejectedCourierIds.includes(courier.id)) {
+          continue;
+        }
 
         try {
           const assigned = await deliveryRepo.assignCourier(
@@ -564,8 +577,6 @@ export class CourierService {
             courier.id,
             tx,
           );
-
-          // await courierRepo.setOnDelivery(courier.id, tx);
 
           await deliveryRepo.createAssignmentLog(
             {
@@ -577,24 +588,31 @@ export class CourierService {
           );
 
           await deliveryRepo.incrementAttempt(delivery.id, tx);
+
           await deliveryRepo.updateLastAssignedAt(delivery.id, tx);
 
           return {
             success: true as const,
-            courierId: courier.id,
-            courierUserId: courier.userId as string,
+
             delivery: assigned,
+
+            courierId: courier.id,
+
+            courierUserId: courier.userId,
           };
-        } catch {
+        } catch (error) {
+          console.warn(`[ASSIGN] Failed courier ${courier.id}`, error);
+
           continue;
         }
       }
 
-      await deliveryRepo.incrementAttempt(delivery.id, tx);
-      throw new Error("Failed to assign courier");
+      return {
+        noCourier: true as const,
+      };
     });
 
-    if (result.success) {
+    if ("success" in result && result.success) {
       await scheduleAssignmentTimeout(deliveryId);
 
       await publishDeliveryEvent({
@@ -602,20 +620,37 @@ export class CourierService {
           id: result.courierId,
           userId: result.courierUserId,
         }),
-        status: "ASSIGNED",
+
+        status: DeliveryStatus.ASSIGNED,
+
         courierId: result.courierId,
+
         courierUserId: result.courierUserId,
       });
+
+      return result;
     }
 
-    if (result.failed) {
+    if ("noCourier" in result && result.noCourier) {
+      await dispatchAssignDelivery(deliveryId, {
+        delay: 10_000,
+      });
+
+      return result;
+    }
+
+    if ("failed" in result && result.failed) {
       const delivery = await deliveryRepo.findByIdPublic(deliveryId);
+
       if (delivery) {
-        publishDeliveryEvent({
+        await publishDeliveryEvent({
           ...this.buildDeliveryPayload(delivery),
-          status: "CANCELLED",
+
+          status: DeliveryStatus.CANCELLED,
         });
       }
+
+      return result;
     }
 
     return result;
