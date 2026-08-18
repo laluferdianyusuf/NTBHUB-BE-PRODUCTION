@@ -504,10 +504,21 @@ export class CourierService {
 
       let candidateCourierIds: string[] = [];
 
-      if (delivery.pickupLatitude && delivery.pickupLongitude) {
+      const hasPickupCoordinates =
+        delivery.pickupLatitude !== null &&
+        delivery.pickupLatitude !== undefined &&
+        delivery.pickupLongitude !== null &&
+        delivery.pickupLongitude !== undefined &&
+        Number.isFinite(Number(delivery.pickupLatitude)) &&
+        Number.isFinite(Number(delivery.pickupLongitude));
+
+      if (hasPickupCoordinates) {
+        const latitude = Number(delivery.pickupLatitude);
+        const longitude = Number(delivery.pickupLongitude);
+
         const nearbyIds = await findNearestCouriers(
-          delivery.pickupLatitude,
-          delivery.pickupLongitude,
+          latitude,
+          longitude,
           100,
           20,
         );

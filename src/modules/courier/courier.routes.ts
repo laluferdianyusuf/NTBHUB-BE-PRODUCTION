@@ -26,7 +26,7 @@ router.get(
 );
 
 router.patch(
-  "/admin/couriers:courierId/approve",
+  "/admin/couriers/:courierId/approve",
   auth.authenticate,
   auth.authorizeGlobalRole(["ADMIN"]),
   asyncHandler(CourierController.approveCourier),

@@ -124,6 +124,7 @@ export class CourierRepository {
             name: true,
             email: true,
             phone: true,
+            photo: true,
           },
         },
       },

@@ -11,7 +11,7 @@ export interface CompressOptions {
 export const compressAndSaveImage = async (
   buffer: Buffer,
   uploadFolder = "uploads",
-  options: CompressOptions = {}
+  options: CompressOptions = {},
 ) => {
   const { targetKB = 200, maxWidth = 1280, minQuality = 40 } = options;
 
