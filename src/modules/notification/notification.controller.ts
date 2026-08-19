@@ -16,14 +16,31 @@ export class NotificationController {
 
   static async getNotificationByRecipient(req: Request, res: Response) {
     const { recipientId } = req.params;
-    const { recipientType } = req.query;
+    const { recipientType, page, limit } = req.query;
     const result = await runService(() =>
-      notificationService.getNotificationByRecipient(
-        recipientType as NotificationRecipientType,
+      notificationService.getNotificationByRecipient({
+        recipientType: recipientType as NotificationRecipientType,
         recipientId,
-      ),
+        page: Number(page) || 1,
+        limit: Number(limit) || 20,
+      }),
     );
     return sendSuccess(res, result, "Notification Retrieved");
+  }
+
+  static async getUnreadNotificationCount(req: Request, res: Response) {
+    const { recipientId } = req.params;
+
+    const { recipientType } = req.query;
+
+    const count = await runService(() =>
+      notificationService.countUnreadNotificationByRecipient({
+        recipientType: recipientType as NotificationRecipientType,
+        recipientId,
+      }),
+    );
+
+    return sendSuccess(res, { count }, "Unread Notification Count Retrieved");
   }
 
   static async getNotification(req: Request, res: Response) {

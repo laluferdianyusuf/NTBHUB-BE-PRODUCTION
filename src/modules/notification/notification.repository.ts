@@ -40,21 +40,81 @@ export class NotificationRepository {
     });
   }
 
-  async findByRecipient(
-    recipientType: NotificationRecipientType,
-    recipientId: string,
-  ): Promise<Notification[]> {
+  async findByRecipient(params: {
+    recipientType: NotificationRecipientType;
+    recipientId: string;
+    skip?: number;
+    take?: number;
+  }): Promise<Notification[]> {
+    const { recipientType, recipientId, skip = 0, take = 10 } = params;
+
     return prisma.notification.findMany({
       where: {
         OR: [
-          { isGlobal: true },
           {
+            isGlobal: true,
+          },
+
+          {
+            isGlobal: false,
             recipientType,
             recipientId,
           },
         ],
       },
-      orderBy: { createdAt: "desc" },
+      skip,
+      take,
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+  }
+
+  async countNotifications(params: {
+    recipientType: NotificationRecipientType;
+    recipientId: string;
+  }): Promise<number> {
+    const { recipientType, recipientId } = params;
+
+    return prisma.notification.count({
+      where: {
+        OR: [
+          {
+            isGlobal: true,
+          },
+
+          {
+            isGlobal: false,
+            recipientType,
+            recipientId,
+          },
+        ],
+      },
+    });
+  }
+
+  async countUnreadNotifications(params: {
+    recipientType: NotificationRecipientType;
+    recipientId: string;
+  }): Promise<number> {
+    const { recipientType, recipientId } = params;
+
+    return prisma.notification.count({
+      where: {
+        isRead: false,
+
+        OR: [
+          {
+            isGlobal: true,
+          },
+
+          {
+            isGlobal: false,
+            recipientType,
+            recipientId,
+          },
+        ],
+      },
     });
   }
 

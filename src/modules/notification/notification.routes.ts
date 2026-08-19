@@ -25,6 +25,12 @@ router.get(
 );
 
 router.get(
+  "/unread-counts/:recipientId",
+  auth.authenticate,
+  asyncHandler(NotificationController.getUnreadNotificationCount),
+);
+
+router.get(
   "/notification/venue/:venueId",
   auth.authenticate,
   asyncHandler(NotificationController.getNotificationByVenue),

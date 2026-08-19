@@ -558,16 +558,56 @@ export class NotificationService {
     return items;
   }
 
-  async getNotificationByRecipient(
-    recipientType: NotificationRecipientType,
-    recipientId: string,
-  ) {
-    const result = await notificationRepository.findByRecipient(
+  async getNotificationByRecipient(params: {
+    recipientType: NotificationRecipientType;
+    recipientId: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const { recipientType, recipientId, page = 1, limit = 10 } = params;
+
+    const safePage = Math.max(1, page);
+    const safeLimit = Math.min(Math.max(1, limit), 100);
+
+    const skip = (safePage - 1) * safeLimit;
+
+    const [data, total] = await Promise.all([
+      notificationRepository.findByRecipient({
+        recipientType,
+        recipientId,
+        skip,
+        take: safeLimit,
+      }),
+
+      notificationRepository.countNotifications({
+        recipientType,
+        recipientId,
+      }),
+    ]);
+
+    return {
+      data,
+      pagination: {
+        page: safePage,
+        limit: safeLimit,
+        total,
+        totalPages: Math.ceil(total / safeLimit),
+        hasNextPage: safePage * safeLimit < total,
+        hasPreviousPage: safePage > 1,
+      },
+    };
+  }
+
+  async countUnreadNotificationByRecipient(params: {
+    recipientType: NotificationRecipientType;
+    recipientId: string;
+  }) {
+    const { recipientType, recipientId } = params;
+
+    return notificationRepository.countUnreadNotifications({
       recipientType,
       recipientId,
-    );
-
-    return result;
+    });
   }
 
   async getUserNotifications(userId: string, page?: number, limit?: number) {
