@@ -28,6 +28,14 @@ export class NotificationController {
     return sendSuccess(res, result, "Notification Retrieved");
   }
 
+  static async getNotificationById(req: Request, res: Response) {
+    const { id } = req.params;
+    const result = await runService(() =>
+      notificationService.getNotificationById(id),
+    );
+    return sendSuccess(res, result, "Notification Retrieved");
+  }
+
   static async getUnreadNotificationCount(req: Request, res: Response) {
     const { recipientId } = req.params;
 

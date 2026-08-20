@@ -36,6 +36,7 @@ import {
   updateCourierLocation as updateCourierGeo,
 } from "socket/courier.socket";
 import { CourierLocationRepository } from "./courier-location.repository";
+import { DeliveryNotificationService } from "modules/notification/deliveryNotificationService";
 
 const courierRepo = new CourierRepository();
 const courierLocationRepo = new CourierLocationRepository();
@@ -49,6 +50,7 @@ const accountRepo = new AccountRepository();
 const ledgerRepo = new LedgerRepository();
 const userRepo = new UserRepository();
 const userService = new UserService();
+const deliveryNotificationService = new DeliveryNotificationService();
 
 const MAX_ATTEMPT = 5;
 const DEFAULT_COURIER_EARNING = 10000;
@@ -467,6 +469,13 @@ export class CourierService {
         tx,
       );
 
+      await deliveryNotificationService.accepted({
+        deliveryId,
+        customerUserId: delivery.userId!,
+        courierUserId: courier.userId,
+        orderId: delivery.orderId,
+      });
+
       await courierRepo.setOnDelivery(courier.id, tx);
 
       return deliveryRepo.updateStatus(deliveryId, "ASSIGNED", tx);
@@ -615,6 +624,12 @@ export class CourierService {
     if ("success" in result && result.success) {
       await scheduleAssignmentTimeout(deliveryId);
 
+      await deliveryNotificationService.assigned({
+        deliveryId,
+        courierUserId: result.courierUserId,
+        orderId: result.delivery.orderId,
+      });
+
       await publishDeliveryEvent({
         ...this.buildDeliveryPayload(result.delivery, {
           id: result.courierId,
@@ -740,6 +755,13 @@ export class CourierService {
       deliveryRepo.markPickedUp(deliveryId, tx),
     );
 
+    await deliveryNotificationService.pickedUp({
+      deliveryId,
+      customerUserId: delivery.userId!,
+      courierUserId: courier.userId,
+      orderId: delivery.orderId,
+    });
+
     await publishDeliveryEvent({
       ...this.buildDeliveryPayload(updated, courier),
       status: "PICKED_UP",
@@ -761,6 +783,13 @@ export class CourierService {
     const updated = await prisma.$transaction(async (tx) =>
       deliveryRepo.markOnTheWay(deliveryId, tx),
     );
+
+    await deliveryNotificationService.onTheWay({
+      deliveryId,
+      customerUserId: delivery.userId!,
+      courierUserId: courier.userId,
+      orderId: delivery.orderId,
+    });
 
     await publishDeliveryEvent({
       ...this.buildDeliveryPayload(updated, courier),
@@ -795,6 +824,13 @@ export class CourierService {
         periodEnd,
         DEFAULT_COURIER_EARNING,
       );
+
+      await deliveryNotificationService.delivered({
+        deliveryId,
+        customerUserId: delivery.userId!,
+        courierUserId: courier.userId,
+        orderId: delivery.orderId,
+      });
 
       return result;
     });

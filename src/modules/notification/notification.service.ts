@@ -12,6 +12,7 @@ import { NotificationRepository } from "modules/notification/notification.reposi
 import { UserRoleRepository } from "modules/user-role/user-role.repository";
 import { UserRepository } from "modules/users/users.repository";
 import { notificationQueue } from "queue/notificationQueue";
+import { BadRequestError, NotFoundError } from "shared/errors";
 import { NotificationJobData } from "types/notification.types";
 import firebase from "utils/firebase";
 import { uploadToCloudinary } from "utils/image";
@@ -281,7 +282,7 @@ export class NotificationService {
 
         if (!tokens.length) return;
 
-        return this.sendFCM(tokens, {
+        return this.sendFCMQueue(tokens, {
           notification: {
             title: n.title,
             body: n.message,
@@ -596,6 +597,15 @@ export class NotificationService {
         hasPreviousPage: safePage > 1,
       },
     };
+  }
+
+  async getNotificationById(id: string) {
+    if (!id) {
+      throw new NotFoundError("Id not found");
+    }
+
+    const notification = await notificationRepository.findById(id);
+    return notification;
   }
 
   async countUnreadNotificationByRecipient(params: {

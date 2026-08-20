@@ -468,7 +468,7 @@ export class BookingRepository extends BaseRepository {
       this.db.ledgerEntry.aggregate({
         where: {
           accountId: venueAccount.id,
-          type: "DEBIT",
+          type: "CREDIT",
           referenceType: "BOOKING_PAYMENT",
         },
         _sum: {
@@ -479,7 +479,7 @@ export class BookingRepository extends BaseRepository {
       this.db.ledgerEntry.aggregate({
         where: {
           accountId: venueAccount.id,
-          type: "DEBIT",
+          type: "CREDIT",
           referenceType: "BOOKING_PAYMENT",
           createdAt: {
             gte: startOfToday,
