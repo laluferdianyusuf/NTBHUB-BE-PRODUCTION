@@ -296,11 +296,15 @@ export class OrderServices {
       if (order.requiresDelivery) {
         const delivery = await deliveryRepository.createDelivery(
           {
+            serviceType: "DELIVERY",
+            paymentStatus: "PAID",
+
             userId: order.userId,
             bookingId: order.bookingId ?? null,
             orderId: order.id,
             pickupAddress: venue?.address ?? "Venue address unavailable",
             dropoffAddress: order.dropoffAddress ?? user?.address ?? "",
+
             pickupLatitude: venue?.latitude ?? null,
             pickupLongitude: venue?.longitude ?? null,
             dropoffLatitude: order.dropoffLatitude ?? null,
