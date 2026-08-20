@@ -79,6 +79,11 @@ export class BookingRepository extends BaseRepository {
             name: true,
           },
         },
+        orders: {
+          select: {
+            total: true,
+          },
+        },
         id: true,
         startTime: true,
         endTime: true,
