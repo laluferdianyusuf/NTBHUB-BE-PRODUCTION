@@ -268,6 +268,7 @@ export class VenueServices {
         totalLikes: venue.totalLikes,
         totalReviews: venue.totalReviews,
         totalViews: venue.totalViews,
+        averageRating: venue.averageRating,
 
         latitude: venue.latitude,
         longitude: venue.longitude,
@@ -364,6 +365,7 @@ export class VenueServices {
         totalLikes: venue.totalLikes,
         totalReviews: venue.totalReviews,
         totalViews: venue.totalViews,
+        averageRating: venue.averageRating,
 
         latitude: venue.latitude,
         longitude: venue.longitude,

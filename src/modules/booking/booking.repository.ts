@@ -19,7 +19,7 @@ export const bookingInclude = {
     },
   },
   venue: {
-    select: { name: true, id: true },
+    select: { name: true, id: true, address: true },
   },
   service: {
     select: {

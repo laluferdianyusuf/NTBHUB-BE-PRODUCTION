@@ -91,23 +91,28 @@ export class ReviewServices {
   }
 
   async getVenueRating(venueId: string) {
-    const reviews = await reviewRepository.findManyByVenueId(venueId);
+    const [ratingResult, reviews] = await Promise.all([
+      reviewRepository.getRatingByVenueId(venueId),
+      reviewRepository.findManyByVenueId(venueId),
+    ]);
 
-    if (reviews.length === 0) {
-      return {
-        rating: 0,
-        totalReviews: 0,
-        reviewers: [],
-      };
-    }
-
-    const average =
-      reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length;
+    const rating = Number((ratingResult._avg.rating ?? 0).toFixed(2));
 
     return {
-      rating: Number(average.toFixed(2)),
-      totalReviews: reviews.length,
-      reviewers: reviews,
+      rating,
+      totalReviews: ratingResult._count.rating,
+
+      ratings: reviews.map((review) => review.rating),
+
+      reviewers: reviews.map((review) => ({
+        id: review.booking.user.id,
+        name: review.booking.user.name,
+        email: review.booking.user.email,
+        photo: review.booking.user.photo,
+        rating: review.rating,
+        comment: review.comment,
+        createdAt: review.createdAt,
+      })),
     };
   }
 }

@@ -52,7 +52,7 @@ export class ReviewRepository {
     });
   }
 
-  async findManyByVenueId(venueId: string): Promise<Review[]> {
+  async findManyByVenueId(venueId: string) {
     return prisma.review.findMany({
       where: {
         booking: {
@@ -72,6 +72,25 @@ export class ReviewRepository {
             },
           },
         },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+  }
+
+  async getRatingByVenueId(venueId: string) {
+    return prisma.review.aggregate({
+      where: {
+        booking: {
+          venueId,
+        },
+      },
+      _avg: {
+        rating: true,
+      },
+      _count: {
+        rating: true,
       },
     });
   }
