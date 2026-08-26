@@ -64,6 +64,47 @@ export class VenueServiceRepository {
     });
   }
 
+  findRecommendedServices(take = 10) {
+    return prisma.venueService.findMany({
+      where: {
+        isActive: true,
+        venue: {
+          isActive: true,
+        },
+      },
+
+      include: {
+        subCategory: {
+          include: {
+            category: true,
+          },
+        },
+
+        venue: {
+          select: {
+            id: true,
+            name: true,
+            image: true,
+          },
+        },
+
+        _count: {
+          select: {
+            bookings: true,
+          },
+        },
+      },
+
+      orderBy: {
+        bookings: {
+          _count: "desc",
+        },
+      },
+
+      take,
+    });
+  }
+
   findAllService(venueId: string, params?: FindAllParams) {
     const where: Prisma.VenueServiceWhereInput = {
       venueId,

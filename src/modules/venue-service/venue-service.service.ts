@@ -199,6 +199,17 @@ export class VenueServiceService {
     return this.venueServiceRepository.findByVenue(venueId);
   }
 
+  async getRecommendedServices() {
+    const services =
+      await this.venueServiceRepository.findRecommendedServices();
+
+    if (!services) {
+      throw new Error("Services not found");
+    }
+
+    return services;
+  }
+
   async getAllServiceByVenue(venueId: string, query?: QueryParams) {
     const venue = await this.venueRepository.findVenueById(venueId);
 

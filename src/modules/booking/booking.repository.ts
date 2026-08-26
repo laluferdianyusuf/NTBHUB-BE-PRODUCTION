@@ -726,7 +726,7 @@ export class BookingRepository extends BaseRepository {
       where: {
         serviceId,
         unitId,
-        status: { notIn: ["CANCELLED"] },
+        status: { in: ["PENDING", "PAID", "ONGOING"] },
         startTime: { lt: endTime },
         endTime: { gt: startTime },
       },
