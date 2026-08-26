@@ -18,19 +18,42 @@ router.post(
   ]),
   asyncHandler(VenueControllers.createVenue),
 );
-router.get("/venue/venues", auth.authenticate, asyncHandler(VenueControllers.getVenues),
+router.get(
+  "/venue/venues",
+  auth.authenticate,
+  asyncHandler(VenueControllers.getVenues),
 );
-router.get("/customers/:venueId", auth.authenticate, asyncHandler(VenueControllers.getCustomers),
+router.get(
+  "/reports/overview",
+  auth.authenticate,
+  asyncHandler(VenueControllers.getOverview),
 );
-router.get("/venue/liked-byUser/:userId", auth.authenticate, asyncHandler(VenueControllers.getVenueLikedByUser),
+router.get(
+  "/customers/:venueId",
+  auth.authenticate,
+  asyncHandler(VenueControllers.getCustomers),
+);
+router.get(
+  "/venue/liked-byUser/:userId",
+  auth.authenticate,
+  asyncHandler(VenueControllers.getVenueLikedByUser),
 );
 
-router.get("/venue/popular/venues", auth.authenticate, asyncHandler(VenueControllers.getPopularVenues),
+router.get(
+  "/venue/popular/venues",
+  auth.authenticate,
+  asyncHandler(VenueControllers.getPopularVenues),
 );
 
-router.get("/active/venues", auth.authenticate, asyncHandler(VenueControllers.getActiveVenues),
+router.get(
+  "/active/venues",
+  auth.authenticate,
+  asyncHandler(VenueControllers.getActiveVenues),
 );
-router.get("/venue/:id", auth.authenticate, asyncHandler(VenueControllers.getVenueDetail),
+router.get(
+  "/venue/:id",
+  auth.authenticate,
+  asyncHandler(VenueControllers.getVenueDetail),
 );
 router.put(
   "/venue/update/:id",
@@ -50,18 +73,32 @@ router.delete(
   asyncHandler(VenueControllers.deleteVenue),
 );
 
-router.put("/activate/:id", auth.authenticate, asyncHandler(VenueControllers.activateVenue),
+router.put(
+  "/activate/:id",
+  auth.authenticate,
+  asyncHandler(VenueControllers.activateVenue),
 );
 
 // interactions with venues
-router.post("/venue/:venueId/like", auth.authenticate, asyncHandler(VenueControllers.toggleLike),
+router.post(
+  "/venue/:venueId/like",
+  auth.authenticate,
+  asyncHandler(VenueControllers.toggleLike),
 );
-router.post("/venue/:venueId/impression", auth.authenticate, asyncHandler(VenueControllers.createImpression),
+router.post(
+  "/venue/:venueId/impression",
+  auth.authenticate,
+  asyncHandler(VenueControllers.createImpression),
 );
 
-router.get("/venue/:venueId/likes/count", auth.authenticate, asyncHandler(VenueControllers.getLikeCount),
+router.get(
+  "/venue/:venueId/likes/count",
+  auth.authenticate,
+  asyncHandler(VenueControllers.getLikeCount),
 );
-router.get("/venue/:venueId/impressions/count", asyncHandler(VenueControllers.getImpressionCount),
+router.get(
+  "/venue/:venueId/impressions/count",
+  asyncHandler(VenueControllers.getImpressionCount),
 );
 
 export default router;

@@ -12,8 +12,12 @@ import { VenueBalanceRepository } from "modules/venue-balance/venue-balance.repo
 import { VenueImpressionRepository } from "modules/venue/venue-impression.repository";
 import { VenueLikeRepository } from "modules/venue/venue-like.repository";
 import { VenueRepository } from "modules/venue/venue.repository";
+import { ReportRepository } from "./report.repository";
 
 type Segment = "VIP" | "Returning" | "New" | "Blocked";
+export type ReportRange = "7d" | "30d" | "90d" | "1y";
+
+const VALID_RANGES: ReportRange[] = ["7d", "30d", "90d", "1y"];
 
 const venueRepository = new VenueRepository();
 const userRepository = new UserRepository();
@@ -22,6 +26,7 @@ const invoiceRepository = new InvoiceRepository();
 const venueBalanceRepository = new VenueBalanceRepository();
 const venueLikeRepository = new VenueLikeRepository();
 const venueImpressionRepository = new VenueImpressionRepository();
+const reportRepository = new ReportRepository();
 
 export class VenueServices {
   private getSegment(bookings: number, spent: number): Segment {
@@ -424,6 +429,16 @@ export class VenueServices {
     }
 
     return { ...existing, isLiked };
+  }
+
+  async getOverview(range: string = "30d") {
+    if (!VALID_RANGES.includes(range as ReportRange)) {
+      throw new Error(
+        `Invalid report range. Allowed values: ${VALID_RANGES.join(", ")}`,
+      );
+    }
+
+    return reportRepository.getReportOverview(range as ReportRange);
   }
 
   async updateVenue(
