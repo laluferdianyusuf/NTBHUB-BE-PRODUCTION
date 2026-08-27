@@ -10,6 +10,11 @@ router.post(
   auth.authenticate,
   asyncHandler(BookingController.createBooking),
 );
+router.get(
+  "/booking/venue-with-details",
+  auth.authenticate,
+  asyncHandler(BookingController.getVenueWithDetails),
+);
 router.put(
   "/booking/payment/:id",
   auth.authenticate,
@@ -69,11 +74,6 @@ router.put(
 router.get(
   "/existing/bookings",
   asyncHandler(BookingController.getExistingBooking),
-);
-router.get(
-  "/booking/venue-with-details",
-  auth.authenticate,
-  asyncHandler(BookingController.getVenueWithDetails),
 );
 
 router.get(

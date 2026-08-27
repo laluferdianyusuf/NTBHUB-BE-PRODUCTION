@@ -576,6 +576,12 @@ export class BookingRepository extends BaseRepository {
       venues.map(async (venue) => {
         const bookings = venue.bookings;
 
+        const account = await this.db.account.findFirst({
+          where: {
+            venueId: venue.id,
+          },
+        });
+
         const [
           revenue,
           totalPending,
@@ -585,16 +591,22 @@ export class BookingRepository extends BaseRepository {
           totalCancelled,
           totalExpired,
         ] = await Promise.all([
-          this.db.ledgerEntry.aggregate({
-            where: {
-              accountId: venue.id,
-              type: "DEBIT",
-              referenceType: "BOOKING_PAYMENT",
-            },
-            _sum: {
-              amount: true,
-            },
-          }),
+          account
+            ? this.db.ledgerEntry.aggregate({
+                where: {
+                  accountId: account.id,
+                  type: "CREDIT",
+                  referenceType: "BOOKING_PAYMENT",
+                },
+                _sum: {
+                  amount: true,
+                },
+              })
+            : Promise.resolve({
+                _sum: {
+                  amount: true,
+                },
+              }),
 
           bookings.filter((b) => b.status === BookingStatus.PENDING).length,
           bookings.filter((b) => b.status === BookingStatus.PAID).length,
