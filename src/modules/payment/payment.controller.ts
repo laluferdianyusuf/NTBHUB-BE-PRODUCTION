@@ -10,6 +10,49 @@ const paymentServices = new PaymentServices();
 const userRoleRepository = new UserRoleRepository();
 
 export class PaymentController {
+  static async getPaymentMethods(req: Request, res: Response) {
+    const amount = Number(req.query.amount);
+
+    if (!req.query.amount || isNaN(amount)) {
+      return res.status(400).json({
+        status: "error",
+        message: "Query parameter 'amount' harus berupa angka yang valid",
+      });
+    }
+
+    const methods = await runService(() =>
+      paymentServices.getAvailablePaymentMethods(amount),
+    );
+
+    return sendSuccess(res, methods, "Topup Methods");
+  }
+
+  static async createTopUpPayment(req: Request, res: Response) {
+    const userId = req.user.id;
+
+    const { amount, paymentMethod } = req.body;
+
+    const payment = await runService(() =>
+      paymentServices.createTopUpPaymentDuitku({
+        userId,
+        amount: Number(amount),
+        paymentMethod,
+      }),
+    );
+
+    return sendSuccess(res, payment, "Top up successful", 201);
+  }
+
+  static async duitkuCallback(req: Request, res: Response) {
+    const payload = req.body;
+
+    const result = await runService(() =>
+      paymentServices.duitkuCallback(payload),
+    );
+
+    return sendSuccess(res, result);
+  }
+
   static async topUp(req: Request, res: Response) {
     const userId = req.user!.id;
     const { amount, bankCode } = req.body;
@@ -62,6 +105,13 @@ export class PaymentController {
     const result = await runService(() =>
       paymentServices.getPaymentStatus(paymentId, userId),
     );
+
+    res.setHeader(
+      "Cache-Control",
+      "no-store, no-cache, must-revalidate, proxy-revalidate",
+    );
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
 
     return sendSuccess(res, result, "Payment status retrieved");
   }

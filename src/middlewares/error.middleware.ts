@@ -3,16 +3,32 @@ import { AppError } from "shared/errors";
 import { sendError } from "shared/http/response";
 import { logger } from "utils/logger";
 
-export const notFoundHandler = (req: Request, res: Response) => {
-  sendError(res, `Route ${req.method} ${req.originalUrl} not found`, 404);
+export const notFoundHandler = (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  if (res.headersSent) {
+    return next();
+  }
+
+  return sendError(
+    res,
+    `Route ${req.method} ${req.originalUrl} not found`,
+    404,
+  );
 };
 
 export const errorHandler = (
   err: unknown,
   _req: Request,
   res: Response,
-  _next: NextFunction,
+  next: NextFunction,
 ) => {
+  if (res.headersSent) {
+    return next(err);
+  }
+
   if (err instanceof AppError) {
     return sendError(res, err.message, err.statusCode);
   }

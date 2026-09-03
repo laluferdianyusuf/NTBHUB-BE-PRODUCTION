@@ -19,16 +19,31 @@ const balanceRepository = new UserBalanceRepository();
 const accountRepository = new AccountRepository();
 
 const QUEUE_NAME = "payment-processing";
-const JOB_NAME = "process-midtrans-webhook";
+const JOB_NAME = "process-payment-webhook";
 
 interface PaymentWebhookJob {
-  payload: any;
+  payload: {
+    order_id?: string;
+    merchantOrderId?: string;
+    transaction_status?: string;
+    resultCode?: string;
+    provider?: "MIDTRANS" | "DUITKU";
+    [key: string]: any;
+  };
 }
 
-function getTopupNetAmount(payment: { amount: unknown; method: string | null }) {
+function getTopupNetAmount(payment: {
+  amount: unknown;
+  method: string | null;
+}) {
   const gross = Number(payment.amount);
 
-  if (payment.method === "QRIS") {
+  if (
+    payment.method === "QRIS" ||
+    payment.method === "SP" ||
+    payment.method === "NQ" ||
+    payment.method === "GQ"
+  ) {
     const fee = Math.ceil((gross / (1 + 0.007)) * 0.007);
     return gross - fee;
   }
@@ -41,28 +56,46 @@ createWorker<PaymentWebhookJob>(
   async (job: Job<PaymentWebhookJob>) => {
     const payload = job.data.payload;
 
-    console.log(`[QUEUE] Processing payment ${payload.order_id}`);
+    const orderId = payload.merchantOrderId || payload.order_id;
+    const reference = payload.reference || "";
+
+    let isSuccess = false;
+    let isExpired = false;
+    let isFailed = false;
+
+    if (payload.resultCode !== undefined) {
+      isSuccess = payload.resultCode === "00";
+      isFailed = payload.resultCode !== "00";
+    } else if (payload.transaction_status) {
+      const status = payload.transaction_status;
+      isSuccess = ["capture", "settlement"].includes(status);
+      isExpired = status === "expire";
+      isFailed = ["cancel", "deny"].includes(status);
+    }
+
+    if (!orderId) {
+      console.error("[QUEUE] Invalid payload: Order ID is missing");
+      return;
+    }
+
+    console.log(`[QUEUE] Processing payment for Order ID: ${orderId}`);
 
     const eventPayload = await prisma.$transaction(async (tx) => {
-      const payment = await paymentRepository.findByProviderRef(
-        payload.order_id,
-        tx,
-      );
+      const payment = await paymentRepository.findByProviderRef(reference, tx);
 
       if (!payment) {
-        console.log("Payment not found");
+        console.log(`[QUEUE] Payment not found for reference: ${orderId}`);
         return null;
       }
 
       if (payment.status === "SUCCESS") {
-        console.log("Payment already processed");
+        console.log(`[QUEUE] Payment ${payment.id} already processed`);
         return null;
       }
 
       const userId = payment.invoice.entityId;
-      const status = payload.transaction_status;
 
-      if (["capture", "settlement"].includes(status)) {
+      if (isSuccess) {
         await paymentRepository.markSuccess(payment.id, tx);
         await invoiceRepository.markPaid(payment.invoiceId, tx);
 
@@ -115,15 +148,13 @@ createWorker<PaymentWebhookJob>(
           amount: actualAmount,
           newBalance: newBalance ?? 0,
           method: payment.method as PaymentEventPayload["method"],
-          provider: "MIDTRANS" as const,
+          provider: (payload.provider || "DUITKU") as any,
         };
       }
 
-      if (status === "expire") {
+      if (isExpired) {
         await paymentRepository.markExpired(payment.id, tx);
         await invoiceRepository.markExpired(payment.invoiceId, tx);
-
-        console.log(`[QUEUE] Payment expired ${payment.id}`);
 
         return {
           userId,
@@ -134,15 +165,13 @@ createWorker<PaymentWebhookJob>(
           status: "EXPIRED" as const,
           amount: Number(payment.amount),
           method: payment.method as PaymentEventPayload["method"],
-          provider: "MIDTRANS" as const,
+          provider: (payload.provider || "DUITKU") as any,
         };
       }
 
-      if (["cancel", "deny"].includes(status)) {
+      if (isFailed) {
         await paymentRepository.markFailed(payment.id, tx);
         await invoiceRepository.markFailed(payment.invoiceId, tx);
-
-        console.log(`[QUEUE] Payment failed ${payment.id}`);
 
         return {
           userId,
@@ -153,7 +182,7 @@ createWorker<PaymentWebhookJob>(
           status: "FAILED" as const,
           amount: Number(payment.amount),
           method: payment.method as PaymentEventPayload["method"],
-          provider: "MIDTRANS" as const,
+          provider: (payload.provider || "DUITKU") as any,
         };
       }
 
@@ -161,6 +190,9 @@ createWorker<PaymentWebhookJob>(
     });
 
     if (eventPayload) {
+      console.log(
+        `[QUEUE] Publishing SSE Event for Payment ID: ${eventPayload.paymentId}`,
+      );
       publishPaymentEvent(eventPayload);
     }
   },

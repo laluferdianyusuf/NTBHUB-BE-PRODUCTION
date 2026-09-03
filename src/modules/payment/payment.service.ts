@@ -9,12 +9,14 @@ import { PaymentRepository } from "modules/payment/payment.repository";
 import { UserRepository } from "modules/users/users.repository";
 import { BookingRepository } from "modules/booking/booking.repository";
 import { OrderRepository } from "modules/order/order.repository";
+import { DuitkuService } from "./duitku.service";
 
 const userRepository = new UserRepository();
 const paymentRepository = new PaymentRepository();
 const invoiceRepository = new InvoiceRepository();
 const bookingRepository = new BookingRepository();
 const orderRepository = new OrderRepository();
+const duitkuService = new DuitkuService();
 
 export class PaymentServices {
   private async verifyPaymentOwnership(
@@ -42,6 +44,197 @@ export class PaymentServices {
       default:
         return false;
     }
+  }
+
+  async getAvailablePaymentMethods(amount: number) {
+    if (amount < 10000) {
+      throw new Error("Minimum payment amount is Rp10.000");
+    }
+
+    const methods = await duitkuService.getPaymentMethods(amount);
+
+    const allowedMethods = methods.filter((method) => {
+      const vaMethods = ["BC", "M2", "I1", "B1", "BT", "BR", "BV", "VA"];
+
+      const qrisMethods = ["SP", "GQ", "SQ", "NQ"];
+
+      return (
+        vaMethods.includes(method.paymentMethod) ||
+        qrisMethods.includes(method.paymentMethod)
+      );
+    });
+
+    return allowedMethods.map((method) => ({
+      code: method.paymentMethod,
+
+      name: method.paymentName,
+
+      image: method.paymentImage,
+
+      fee: Number(method.totalFee),
+
+      type: ["SP", "GQ", "SQ", "NQ"].includes(method.paymentMethod)
+        ? "QRIS"
+        : "VA",
+    }));
+  }
+
+  async createTopUpPaymentDuitku(data: {
+    userId: string;
+
+    amount: number;
+
+    paymentMethod: string;
+  }) {
+    const user = await userRepository.findById(data.userId);
+
+    if (!user) {
+      throw new NotFoundError("User not found");
+    }
+
+    const methods = await duitkuService.getPaymentMethods(data.amount);
+
+    const selectedMethod = methods.find(
+      (method) => method.paymentMethod === data.paymentMethod,
+    );
+
+    if (!selectedMethod) {
+      throw new Error("Payment method is not available");
+    }
+
+    const paymentFee = Number(selectedMethod.totalFee);
+    const qrisFee = Math.ceil((data.amount / (1 + 0.007)) * 0.007);
+
+    const topUpId = `TOPUP-${crypto.randomUUID().slice(0, 12).toUpperCase()}`;
+
+    const qrisMethods = ["SP", "GQ", "SQ", "NQ"];
+
+    const isQris = qrisMethods.includes(data.paymentMethod);
+
+    const grossAmount = isQris ? data.amount + qrisFee : data.amount + 4440;
+
+    const expiryMinutes = isQris ? 10 : 60;
+
+    const expiredAt = new Date(Date.now() + expiryMinutes * 60 * 1000);
+
+    const duitkuTransaction = await duitkuService.createTransaction({
+      merchantOrderId: topUpId,
+
+      paymentAmount: grossAmount,
+
+      paymentMethod: data.paymentMethod,
+
+      productDetails: `Top Up NTB Hub`,
+
+      customerVaName: user.name.slice(0, 20),
+
+      email: user.email,
+
+      phoneNumber: user.phone,
+
+      expiryPeriod: expiryMinutes,
+    });
+
+    return prisma.$transaction(async (tx) => {
+      const invoice = await invoiceRepository.create(
+        {
+          entityType: "TOPUP",
+
+          entityId: data.userId,
+
+          amount: Number(duitkuTransaction.amount),
+
+          invoiceNumber: topUpId,
+
+          expiredAt,
+        },
+        tx,
+      );
+
+      const payment = await paymentRepository.create(
+        {
+          invoiceId: invoice.id,
+
+          amount: Number(duitkuTransaction.amount),
+
+          method: isQris ? "QRIS" : "VA",
+
+          provider: "DUITKU",
+
+          providerRef: duitkuTransaction.reference,
+
+          vaNumber: duitkuTransaction.vaNumber ?? null,
+
+          qrisUrl: duitkuTransaction.qrString ?? null,
+
+          expiredAt,
+        },
+        tx,
+      );
+
+      await enqueueTransactionExpiry(payment.id, payment.expiredAt as Date);
+
+      return {
+        paymentId: payment.id,
+
+        invoiceId: invoice.id,
+
+        reference: duitkuTransaction.reference,
+
+        amount: data.amount,
+
+        paymentFee,
+
+        grossAmount: Number(duitkuTransaction.amount),
+
+        method: selectedMethod.paymentName,
+
+        paymentType: isQris ? "QRIS" : "VA",
+
+        vaNumber: duitkuTransaction.vaNumber ?? null,
+
+        qrString: duitkuTransaction.qrString ?? null,
+
+        paymentUrl: duitkuTransaction.paymentUrl ?? null,
+
+        expiredAt: invoice.expiredAt,
+      };
+    });
+  }
+
+  async duitkuCallback(payload: any) {
+    const apiKey = process.env.DUITKU_API_KEY!;
+
+    const stringToSign = `${payload.merchantCode}${payload.amount}${payload.merchantOrderId}${apiKey}`;
+
+    const signature = crypto
+      .createHash("md5")
+      .update(stringToSign)
+      .digest("hex");
+
+    if (signature.toLowerCase() !== payload.signature?.toLowerCase()) {
+      console.error("[Duitku Callback Error] Invalid signature", {
+        expected: signature,
+        received: payload.signature,
+        stringToSign,
+      });
+      throw new Error("Invalid Duitku signature");
+    }
+
+    await enqueuePaymentWebhook({
+      provider: "DUITKU",
+      merchantCode: payload.merchantCode,
+      amount: payload.amount,
+      merchantOrderId: payload.merchantOrderId,
+      paymentCode: payload.paymentCode,
+      resultCode: payload.resultCode,
+      reference: payload.reference,
+      signature: payload.signature,
+    });
+
+    return {
+      message: "Webhook received",
+    };
   }
 
   async TopUp(data: { userId: string; amount: number; bankCode: string }) {

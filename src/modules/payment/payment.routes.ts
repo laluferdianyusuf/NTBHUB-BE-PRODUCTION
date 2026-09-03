@@ -3,8 +3,21 @@ import { Router } from "express";
 import { asyncHandler } from "shared/http/asyncHandler";
 import { auth } from "shared/middleware/auth";
 
-
 const router = Router();
+
+router.get(
+  "/duitku/methods",
+  auth.authenticate,
+  asyncHandler(PaymentController.getPaymentMethods),
+);
+
+router.post(
+  "/duitku/topUp",
+  auth.authenticate,
+  asyncHandler(PaymentController.createTopUpPayment),
+);
+
+router.post("/duitku/callback", asyncHandler(PaymentController.duitkuCallback));
 
 router.post(
   "/topUp",
@@ -18,8 +31,7 @@ router.post(
   auth.authorizeGlobalRole(["CUSTOMER"]),
   asyncHandler(PaymentController.topUpQris),
 );
-router.post("/callback", asyncHandler(PaymentController.midtransCallback),
-);
+router.post("/callback", asyncHandler(PaymentController.duitkuCallback));
 
 router.get(
   "/lists/:userId",
@@ -31,7 +43,6 @@ router.get(
 router.get(
   "/:paymentId/status",
   auth.authenticate,
-  auth.authorizeGlobalRole(["CUSTOMER"]),
   asyncHandler(PaymentController.getPaymentStatus),
 );
 
