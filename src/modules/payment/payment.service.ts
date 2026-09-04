@@ -54,7 +54,18 @@ export class PaymentServices {
     const methods = await duitkuService.getPaymentMethods(amount);
 
     const allowedMethods = methods.filter((method) => {
-      const vaMethods = ["BC", "M2", "I1", "B1", "BT", "BR", "BV", "VA"];
+      const vaMethods = [
+        "BC",
+        "M2",
+        "I1",
+        "B1",
+        "BT",
+        "BR",
+        "BV",
+        "DM",
+        "VA",
+        "NC",
+      ];
 
       const qrisMethods = ["SP", "GQ", "SQ", "NQ"];
 
